@@ -14,11 +14,13 @@
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
     "next": "latest",
+    "pg": "^8.23.0",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
+    "@types/pg": "^8.23.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "eslint": "latest",
