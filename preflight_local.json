@@ -1,0 +1,101 @@
+{
+  "operations": 60,
+  "arrivals": 52,
+  "shipments": 8,
+  "itemRows": 279,
+  "contractors": 18,
+  "products": 15,
+  "errors": [],
+  "products_observed": [
+    {
+      "name": "Акб",
+      "occurrences": 16,
+      "minPrice": 300.0,
+      "maxPrice": 320.0
+    },
+    {
+      "name": "Ашка",
+      "occurrences": 27,
+      "minPrice": 4971.675978,
+      "maxPrice": 5550.0
+    },
+    {
+      "name": "Банка",
+      "occurrences": 4,
+      "minPrice": 450.0,
+      "maxPrice": 450.0
+    },
+    {
+      "name": "Диск",
+      "occurrences": 13,
+      "minPrice": 850.0,
+      "maxPrice": 950.0
+    },
+    {
+      "name": "Дюр",
+      "occurrences": 32,
+      "minPrice": 680.0,
+      "maxPrice": 810.0
+    },
+    {
+      "name": "Латунь",
+      "occurrences": 32,
+      "minPrice": 2562.200956,
+      "maxPrice": 3100.0
+    },
+    {
+      "name": "Латунь Струшка",
+      "occurrences": 1,
+      "minPrice": 2100.0,
+      "maxPrice": 2100.0
+    },
+    {
+      "name": "Медь кабель",
+      "occurrences": 7,
+      "minPrice": 1500.0,
+      "maxPrice": 1500.0
+    },
+    {
+      "name": "Микс",
+      "occurrences": 42,
+      "minPrice": 4642.857143,
+      "maxPrice": 5550.0
+    },
+    {
+      "name": "Мягкий",
+      "occurrences": 33,
+      "minPrice": 980.0,
+      "maxPrice": 1120.0
+    },
+    {
+      "name": "Нерж",
+      "occurrences": 6,
+      "minPrice": 80.0,
+      "maxPrice": 250.0
+    },
+    {
+      "name": "Рад",
+      "occurrences": 21,
+      "minPrice": 300.0,
+      "maxPrice": 450.0
+    },
+    {
+      "name": "Свинец",
+      "occurrences": 9,
+      "minPrice": 400.0,
+      "maxPrice": 500.0
+    },
+    {
+      "name": "Тех",
+      "occurrences": 23,
+      "minPrice": 1070.0,
+      "maxPrice": 1150.0
+    },
+    {
+      "name": "Цинк",
+      "occurrences": 13,
+      "minPrice": 350.0,
+      "maxPrice": 585.0
+    }
+  ]
+}

@@ -1,0 +1,646 @@
+{
+  "file": "C:\\Users\\Шолпан\\Downloads\\Копия Метал - Общий журнал.csv",
+  "source": "Google Sheets V6 Общий журнал",
+  "summary": {
+    "operations": 60,
+    "arrivals": 52,
+    "shipments": 8,
+    "itemRows": 279,
+    "contractors": 18,
+    "products": 15,
+    "alreadyImported": 0,
+    "missingProducts": 15,
+    "errors": 0,
+    "warnings": 1
+  },
+  "missingProducts": [
+    {
+      "name": "Цинк",
+      "suggestedPrice": 350,
+      "occurrences": 13,
+      "minPrice": 350,
+      "maxPrice": 585
+    },
+    {
+      "name": "Медь кабель",
+      "suggestedPrice": 1500,
+      "occurrences": 7,
+      "minPrice": 1500,
+      "maxPrice": 1500
+    },
+    {
+      "name": "Мягкий",
+      "suggestedPrice": 1120,
+      "occurrences": 33,
+      "minPrice": 980,
+      "maxPrice": 1120
+    },
+    {
+      "name": "Дюр",
+      "suggestedPrice": 810,
+      "occurrences": 32,
+      "minPrice": 680,
+      "maxPrice": 810
+    },
+    {
+      "name": "Микс",
+      "suggestedPrice": 5400,
+      "occurrences": 42,
+      "minPrice": 4642.857143,
+      "maxPrice": 5550
+    },
+    {
+      "name": "Диск",
+      "suggestedPrice": 950,
+      "occurrences": 13,
+      "minPrice": 850,
+      "maxPrice": 950
+    },
+    {
+      "name": "Латунь",
+      "suggestedPrice": 2950,
+      "occurrences": 32,
+      "minPrice": 2562.200956,
+      "maxPrice": 3100
+    },
+    {
+      "name": "Ашка",
+      "suggestedPrice": 5267.2008,
+      "occurrences": 27,
+      "minPrice": 4971.675978,
+      "maxPrice": 5550
+    },
+    {
+      "name": "Акб",
+      "suggestedPrice": 300,
+      "occurrences": 16,
+      "minPrice": 300,
+      "maxPrice": 320
+    },
+    {
+      "name": "Свинец",
+      "suggestedPrice": 450,
+      "occurrences": 9,
+      "minPrice": 400,
+      "maxPrice": 500
+    },
+    {
+      "name": "Тех",
+      "suggestedPrice": 1120,
+      "occurrences": 23,
+      "minPrice": 1070,
+      "maxPrice": 1150
+    },
+    {
+      "name": "Рад",
+      "suggestedPrice": 320,
+      "occurrences": 21,
+      "minPrice": 300,
+      "maxPrice": 450
+    },
+    {
+      "name": "Нерж",
+      "suggestedPrice": 190,
+      "occurrences": 6,
+      "minPrice": 80,
+      "maxPrice": 250
+    },
+    {
+      "name": "Банка",
+      "suggestedPrice": 450,
+      "occurrences": 4,
+      "minPrice": 450,
+      "maxPrice": 450
+    },
+    {
+      "name": "Латунь Струшка",
+      "suggestedPrice": 2100,
+      "occurrences": 1,
+      "minPrice": 2100,
+      "maxPrice": 2100
+    }
+  ],
+  "products": [
+    {
+      "name": "Акб",
+      "count": 16,
+      "prices": [
+        300,
+        320,
+        320,
+        320,
+        300,
+        300,
+        300,
+        320,
+        300,
+        300,
+        320,
+        320,
+        300,
+        300,
+        320,
+        320
+      ],
+      "minPrice": 300,
+      "maxPrice": 320
+    },
+    {
+      "name": "Ашка",
+      "count": 27,
+      "prices": [
+        5267.2008,
+        5500,
+        5500,
+        5500,
+        5450,
+        5500,
+        5500,
+        5145.787671,
+        5133.1935,
+        4971.675978,
+        5500,
+        5500,
+        5080.444,
+        5500,
+        5450,
+        5550,
+        5074.565,
+        5250,
+        5250,
+        5250,
+        5300,
+        5300,
+        5300,
+        5300,
+        5250,
+        5200,
+        5200
+      ],
+      "minPrice": 4971.675978,
+      "maxPrice": 5550
+    },
+    {
+      "name": "Банка",
+      "count": 4,
+      "prices": [
+        450,
+        450,
+        450,
+        450
+      ],
+      "minPrice": 450,
+      "maxPrice": 450
+    },
+    {
+      "name": "Диск",
+      "count": 13,
+      "prices": [
+        950,
+        950,
+        950,
+        920,
+        900,
+        900,
+        900,
+        900,
+        900,
+        900,
+        900,
+        850,
+        900
+      ],
+      "minPrice": 850,
+      "maxPrice": 950
+    },
+    {
+      "name": "Дюр",
+      "count": 32,
+      "prices": [
+        810,
+        700,
+        700,
+        700,
+        710,
+        700,
+        700,
+        700,
+        700,
+        700,
+        700,
+        700,
+        710,
+        710,
+        710,
+        710,
+        710,
+        680,
+        700,
+        700,
+        700,
+        710,
+        700,
+        700,
+        700,
+        720,
+        720,
+        700,
+        720,
+        720,
+        720,
+        720
+      ],
+      "minPrice": 680,
+      "maxPrice": 810
+    },
+    {
+      "name": "Латунь",
+      "count": 32,
+      "prices": [
+        2950,
+        2979.23,
+        2950,
+        2950,
+        2950,
+        2950,
+        2950,
+        2900,
+        3000,
+        3000,
+        3000,
+        2950,
+        3100,
+        2562.200956,
+        2749.713024,
+        2636.751412,
+        2950,
+        2681.902,
+        2930,
+        2900,
+        2577.144,
+        2850,
+        2850,
+        2850,
+        2900,
+        2900,
+        2900,
+        2850,
+        2850,
+        2850,
+        2850,
+        2850
+      ],
+      "minPrice": 2562.200956,
+      "maxPrice": 3100
+    },
+    {
+      "name": "Латунь Струшка",
+      "count": 1,
+      "prices": [
+        2100
+      ],
+      "minPrice": 2100,
+      "maxPrice": 2100
+    },
+    {
+      "name": "Медь кабель",
+      "count": 7,
+      "prices": [
+        1500,
+        1500,
+        1500,
+        1500,
+        1500,
+        1500,
+        1500
+      ],
+      "minPrice": 1500,
+      "maxPrice": 1500
+    },
+    {
+      "name": "Микс",
+      "count": 42,
+      "prices": [
+        5400,
+        5330,
+        5000,
+        5267.2008,
+        5330,
+        5330,
+        5330,
+        5300,
+        5300,
+        5300,
+        5300,
+        5330,
+        5330,
+        5330,
+        5330,
+        5400,
+        5400,
+        5145.787671,
+        5133.1935,
+        4971.692308,
+        4642.857143,
+        5330,
+        5330,
+        5080.444,
+        5330,
+        5300,
+        5380,
+        5550,
+        5073.565,
+        5100,
+        5100,
+        5100,
+        5130,
+        5130,
+        5130,
+        5100,
+        5100,
+        5100,
+        5100,
+        5100,
+        5100,
+        5062.79
+      ],
+      "minPrice": 4642.857143,
+      "maxPrice": 5550
+    },
+    {
+      "name": "Мягкий",
+      "count": 33,
+      "prices": [
+        1120,
+        1030,
+        1020,
+        1020,
+        1020,
+        1000,
+        1000,
+        1000,
+        1000,
+        1020,
+        1020,
+        1020,
+        1020,
+        1020,
+        1020,
+        1020,
+        1020,
+        1000,
+        1020,
+        1020,
+        1020,
+        1020,
+        1020,
+        1020,
+        1020,
+        1030,
+        1030,
+        1020,
+        1020,
+        1020,
+        1020,
+        1020,
+        980
+      ],
+      "minPrice": 980,
+      "maxPrice": 1120
+    },
+    {
+      "name": "Нерж",
+      "count": 6,
+      "prices": [
+        190,
+        170,
+        170,
+        170,
+        250,
+        80
+      ],
+      "minPrice": 80,
+      "maxPrice": 250
+    },
+    {
+      "name": "Рад",
+      "count": 21,
+      "prices": [
+        320,
+        300,
+        300,
+        320,
+        350,
+        350,
+        300,
+        350,
+        330,
+        300,
+        330,
+        330,
+        330,
+        330,
+        360,
+        360,
+        450,
+        300,
+        450,
+        450,
+        340
+      ],
+      "minPrice": 300,
+      "maxPrice": 450
+    },
+    {
+      "name": "Свинец",
+      "count": 9,
+      "prices": [
+        450,
+        500,
+        450,
+        450,
+        400,
+        450,
+        500,
+        500,
+        500
+      ],
+      "minPrice": 400,
+      "maxPrice": 500
+    },
+    {
+      "name": "Тех",
+      "count": 23,
+      "prices": [
+        1120,
+        1120,
+        1120,
+        1070,
+        1130,
+        1130,
+        1140,
+        1140,
+        1140,
+        1100,
+        1140,
+        1120,
+        1100,
+        1120,
+        1120,
+        1120,
+        1120,
+        1140,
+        1150,
+        1150,
+        1100,
+        1120,
+        1120
+      ],
+      "minPrice": 1070,
+      "maxPrice": 1150
+    },
+    {
+      "name": "Цинк",
+      "count": 13,
+      "prices": [
+        350,
+        400,
+        400,
+        450,
+        450,
+        585,
+        350,
+        350,
+        350,
+        450,
+        450,
+        400,
+        380
+      ],
+      "minPrice": 350,
+      "maxPrice": 585
+    }
+  ],
+  "suspiciousCreatedAt": [
+    {
+      "headerLabel": "ПРИХОД №23",
+      "operationDate": "2026-08-17",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №22",
+      "operationDate": "2026-08-17",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №21",
+      "operationDate": "2026-08-17",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ОТГРУЗКА №20",
+      "operationDate": "2026-08-16",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №19",
+      "operationDate": "2026-08-16",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №18",
+      "operationDate": "2026-08-15",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ОТГРУЗКА №17",
+      "operationDate": "2026-08-15",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №16",
+      "operationDate": "2026-08-15",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №15",
+      "operationDate": "2026-08-15",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №14",
+      "operationDate": "2026-08-14",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №13",
+      "operationDate": "2026-08-14",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №12",
+      "operationDate": "2026-08-15",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №11",
+      "operationDate": "2026-08-13",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №10",
+      "operationDate": "2026-08-12",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №9",
+      "operationDate": "2026-08-12",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №8",
+      "operationDate": "2026-08-12",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №7",
+      "operationDate": "2026-08-12",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №6",
+      "operationDate": "2026-08-11",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №5",
+      "operationDate": "2026-08-11",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №4",
+      "operationDate": "2026-08-11",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №3",
+      "operationDate": "2026-08-11",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №2",
+      "operationDate": "2026-08-11",
+      "createdRaw": "01.01.2000"
+    },
+    {
+      "headerLabel": "ПРИХОД №1",
+      "operationDate": "2026-08-09",
+      "createdRaw": "01.01.2000"
+    }
+  ],
+  "historicalShortages": [],
+  "errors": [],
+  "warnings": [
+    "У 23 операций нет надёжного времени создания; импортёр будет строить детерминированное created_at из даты + номера операции."
+  ]
+}

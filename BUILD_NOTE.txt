@@ -1,0 +1,10 @@
+Пункт приёмки — отдельная сборка на базе интерфейса Ангара.
+
+Изменено для отдельного контура:
+- отдельный branding «Пункт приёмки»;
+- отдельные localStorage keys для черновиков и вечерних сводок;
+- вечерняя сводка формулируется как сводка пункта приёмки, без привязки UI к Ангару;
+- package name изменён на uchet-priemki-supabase-vercel;
+- добавлены README.md и DEPLOY_PRIEMKA.md с инструкцией отдельной Supabase/Vercel базы.
+
+Важно: npm install/build в среде упаковки не завершился за доступное время, поэтому архив не помечен как production-validated build. Перед Vercel деплоем выполнить npm install, npm run typecheck и npm run build.
