@@ -38,3 +38,7 @@ In Supabase verify:
 - Point products/employees RPCs exist
 - `point_transfer_to_angar` has only the canonical 4-arg version
 - `delete_operation(uuid)` exists
+
+## V11 follow-up
+After applying V10, apply `supabase/migrations/202609020002_point_audit_v11.sql`.
+Then use `public.point_schema_health()` from an authenticated Point session for a quick smoke check.

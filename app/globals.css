@@ -212,3 +212,6 @@
 .report-toolbar .report-dates button{align-self:end}
 @media(max-width:1100px){.stock-admin-grid{grid-template-columns:1fr}.stock-grid-wide{grid-template-columns:repeat(3,minmax(0,1fr))}.report-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.point-tabs{position:static;grid-template-columns:1fr 1fr 1fr}.point-tabs button{padding:10px 7px;font-size:12px}.stock-add-fields{grid-template-columns:1fr}.stock-grid-wide{grid-template-columns:1fr 1fr}.report-columns{grid-template-columns:1fr}.report-product-grid{grid-template-columns:1fr}.report-toolbar{align-items:stretch}.report-toolbar .period-chips{width:100%}.report-toolbar .report-dates{display:grid;grid-template-columns:1fr 1fr}.report-toolbar .report-dates button{grid-column:1/-1}.report-kpis{grid-template-columns:1fr 1fr!important}}
+
+/* Workspace switch: Angar -> Point */
+.workspace-switch{background:#2d2a21!important;color:#fff!important;border-color:#2d2a21!important;font-weight:900}.workspace-switch:hover{background:#17150f!important}

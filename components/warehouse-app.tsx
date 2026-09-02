@@ -10,7 +10,7 @@ type Contractor={id:string;name:string;group_id:string|null;group_name?:string|n
 type Group={id:string;name:string;children:Contractor[];archived_at?:string|null};
 type Line={product_id:string;product_name:string;kg:number;price:number;sum:number;wasteKg:number;cogs:number};
 type Operation={id:string;operation_number:number;operation_date:string;type:Mode;role:string;status:string;version:number;contractor_id:string;contractor_name:string;group_name?:string|null;created_at:string;items:Line[]};
-type Profile={display_name?:string;role?:string;workspace_id?:string};
+type Profile={display_name?:string;role?:string;workspace_id?:string;point_workspace_id?:string|null};
 
 const moneyFmt=new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2});
 const kgFmt=new Intl.NumberFormat('ru-RU',{maximumFractionDigits:3});
@@ -208,7 +208,7 @@ export default function WarehouseApp({userEmail='',profile=null}:{userEmail?:str
   return <div className="warehouse-shell">
     <header className="topbar">
       <div className="brand"><div className="brand-icon">⚖</div><div><div className="brand-title">Учёт склада</div><div className="brand-sub">Supabase edition · {profile?.display_name||userEmail}</div></div></div>
-      <div className="top-actions"><span className="workspace-pill">{profile?.workspace_id ? 'Метал' : 'Склад'}</span><button onClick={controlCheck}>Проверка</button><button onClick={logout}>Выйти</button></div>
+      <div className="top-actions"><span className="workspace-pill">{profile?.workspace_id ? 'Метал' : 'Склад'}</span>{profile?.point_workspace_id&&<button className="workspace-switch" onClick={()=>{window.location.href='/point';}}>Точка</button>}<button onClick={controlCheck}>Проверка</button><button onClick={logout}>Выйти</button></div>
     </header>
     <nav className="navtabs">
       {([['monitor','Монитор'],['operation','Операция'],['journal','Журнал'],['stock','Остатки'],['report','Отчёты'],['search','Поиск'],['clients','Контрагенты'],['products','Товары'],['control','Контроль']] as const).map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>nav(id)}>{label}</button>)}
