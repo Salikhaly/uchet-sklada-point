@@ -159,7 +159,7 @@ export default function PointApp(){
     if(items.length>1)return notify('Перемещайте по одному товару за операцию');
     setBusy(true);
     const item=items[0];
-    const {error}=await supabase.rpc('point_transfer_to_angar',{p_product_id:item.product_id,p_quantity_kg:item.kg,p_note:'Перемещение Точка → Ангар'});
+    const {error}=await supabase.rpc('point_transfer_to_angar',{p_product_id:item.product_id,p_quantity_kg:item.kg,p_note:'Перемещение Точка → Ангар',p_idempotency_key:crypto.randomUUID()});
     setBusy(false);
     if(error)return notify(error.message);
     clearEntry();
