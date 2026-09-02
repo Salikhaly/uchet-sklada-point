@@ -13,9 +13,7 @@
   "dependencies": {
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
-    "@types/pg": "^8.23.1",
     "next": "latest",
-    "pg": "^8.23.0",
     "react": "latest",
     "react-dom": "latest"
   },

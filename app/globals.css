@@ -180,3 +180,35 @@
 @media(max-width:1100px){.point-kpis{grid-template-columns:repeat(3,1fr)}.point-entry-grid,.evening-layout{grid-template-columns:1fr}.entry-summary{min-height:220px}.compact-stock-grid{grid-template-columns:repeat(3,1fr)}.evening-actions{display:grid;grid-template-columns:repeat(2,1fr)}.evening-actions .primary.large{grid-column:1/-1}.expense-entry{grid-template-columns:1fr 1fr 1.5fr 1fr}.expense-entry button{grid-column:1/-1}}
 @media(max-width:760px){.topbar{height:auto;min-height:72px;padding:11px 12px;gap:10px}.top-actions{flex-wrap:wrap;justify-content:flex-end}.point-date{order:3;width:100%;justify-content:flex-end}.point-page{padding:12px}.point-hero{align-items:flex-start;flex-direction:column}.point-hero h1{font-size:26px}.point-kpis{grid-template-columns:1fr 1fr}.point-modebar{grid-template-columns:1fr 1fr}.point-sheet{overflow-x:auto}.point-sheet-head,.point-sheet-row{min-width:760px}.point-entry-grid{gap:10px}.entry-summary{position:sticky;bottom:10px;z-index:10;box-shadow:0 12px 30px rgba(0,0,0,.18)}.compact-stock-grid{grid-template-columns:1fr 1fr}.evening-summary-grid{grid-template-columns:1fr 1fr}.money-grid{grid-template-columns:1fr}.cash-check{grid-template-columns:1fr auto 1fr auto;gap:6px}.expense-entry{grid-template-columns:1fr 1fr}.expense-entry input:nth-child(3){grid-column:1/-1}.expense-entry button{grid-column:1/-1}.expense-head{display:none}.expense-row{grid-template-columns:1fr auto;gap:5px 10px}.expense-row>span:nth-child(2),.expense-row>span:nth-child(3){grid-column:1}.expense-row strong{grid-column:2;grid-row:1/3}.ledger-row{grid-template-columns:1fr auto}.ledger-items{grid-column:1/-1}.ledger-total{grid-column:2;grid-row:1}.employee-inline{flex-wrap:wrap}.employee-inline input{width:100%}.employee-inline span{margin-left:0}.point-footer{flex-direction:column}.day-state{align-items:flex-start}}
 .final-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.summary-panel{background:#fff;border:1px solid #dfe2d6;border-radius:12px;padding:12px}.summary-panel h3{margin:0 0 9px;font-size:13px}.summary-line{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px dashed #e1e3da;font-size:12px}.summary-line:first-of-type{border-top:0}.summary-wide{grid-column:1/-1}.audit-line{display:grid;grid-template-columns:55px 1fr auto;gap:8px;padding:7px 0;border-top:1px dashed #e1e3da;font-size:11px;align-items:center}.audit-line:first-of-type{border-top:0}.audit-line span,.audit-line em{color:var(--muted);font-style:normal}.audit-line b{font-weight:700}@media(max-width:760px){.final-summary-grid{grid-template-columns:1fr}.summary-wide{grid-column:auto}.audit-line{grid-template-columns:45px 1fr}.audit-line em{grid-column:2}}
+/* Point v9: clear section tabs, stock administration and period reports */
+.point-tabs{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:6px;padding:5px;background:#e8eadf;border:1px solid var(--border);border-radius:14px;margin:0 0 14px;position:sticky;top:8px;z-index:20;box-shadow:0 7px 18px rgba(39,32,20,.06)}
+.point-tabs button{border:0;background:transparent;color:#5b574a;border-radius:10px;padding:12px 14px;font-weight:900;font-size:14px;cursor:pointer}
+.point-tabs button:hover{background:#f7f8f3}
+.point-tabs button.active{background:#2d2a21;color:#fff;box-shadow:0 4px 12px rgba(31,28,20,.12)}
+.stock-admin-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:12px}
+.stock-add-card,.stock-totals-card{background:#fff;border:1px solid #dfe2d6;border-radius:14px;padding:14px}
+.stock-add-card{background:linear-gradient(180deg,#fffdf6 0%,#fafbf4 100%);border-color:#e3dac1}
+.stock-add-fields{display:grid;grid-template-columns:minmax(0,1fr) 220px auto;gap:8px}
+.stock-add-fields input{border:1px solid var(--border);background:#fff;border-radius:9px;padding:10px 11px;min-width:0}
+.stock-add-fields input:focus{outline:2px solid rgba(166,93,40,.18);border-color:#a65d28}
+.stock-totals-card{display:flex;flex-direction:column;justify-content:center;gap:5px;background:#252219;color:#fff}
+.stock-totals-card span{font-size:11px;color:#bdb8a8;text-transform:uppercase;letter-spacing:.07em}
+.stock-totals-card b{font-size:28px}
+.stock-totals-card small{font-size:11px;color:#c9c4b7}
+.stock-grid-wide{grid-template-columns:repeat(4,minmax(0,1fr))}
+.report-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.report-rows{display:flex;flex-direction:column;gap:7px}
+.report-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 12px;border:1px solid #dfe2d6;background:#fff;border-radius:11px}
+.report-row>div{display:flex;flex-direction:column;min-width:0}
+.report-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.report-row small{font-size:10px;color:var(--muted);margin-top:2px}
+.report-row strong{white-space:nowrap;font-size:15px}
+.report-product-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.report-product-card{display:flex;flex-direction:column;gap:5px;padding:11px 12px;border:1px solid #dfe2d6;border-radius:12px;background:#fff}
+.report-product-card b{font-size:14px}
+.report-product-card span{font-size:11px;color:var(--muted)}
+.report-toolbar{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap}
+.report-toolbar .report-dates{align-items:end}
+.report-toolbar .report-dates button{align-self:end}
+@media(max-width:1100px){.stock-admin-grid{grid-template-columns:1fr}.stock-grid-wide{grid-template-columns:repeat(3,minmax(0,1fr))}.report-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.point-tabs{position:static;grid-template-columns:1fr 1fr 1fr}.point-tabs button{padding:10px 7px;font-size:12px}.stock-add-fields{grid-template-columns:1fr}.stock-grid-wide{grid-template-columns:1fr 1fr}.report-columns{grid-template-columns:1fr}.report-product-grid{grid-template-columns:1fr}.report-toolbar{align-items:stretch}.report-toolbar .period-chips{width:100%}.report-toolbar .report-dates{display:grid;grid-template-columns:1fr 1fr}.report-toolbar .report-dates button{grid-column:1/-1}.report-kpis{grid-template-columns:1fr 1fr!important}}
