@@ -215,3 +215,152 @@
 
 /* Workspace switch: Angar -> Point */
 .workspace-switch{background:#2d2a21!important;color:#fff!important;border-color:#2d2a21!important;font-weight:900}.workspace-switch:hover{background:#17150f!important}
+
+/* V12 UX: larger, softer mobile typography + explicit journal timing/action + strict product order */
+.point-sheet-row .p-name b{font-size:16px;line-height:1.25}
+.point-sheet-row .p-name small{font-size:12px}
+.point-sheet-row input{min-height:42px;font-size:15px}
+.point-sheet-head{font-size:12px;font-weight:800;letter-spacing:.02em}
+.ledger-row{padding:13px 14px;gap:12px;min-height:76px}
+.ledger-main{gap:5px}
+.ledger-meta{display:flex;align-items:center;gap:8px}
+.ledger-meta b{font-size:12px}
+.ledger-time{font-size:12px;color:var(--muted);font-weight:800}
+.ledger-main strong{font-size:15px;letter-spacing:.01em}
+.ledger-person{font-size:13px!important;color:#4e4a3d!important;font-weight:700}
+.ledger-items span{font-size:12px;padding:7px 9px}
+.ledger-total{font-size:15px}
+.report-product-card{padding:14px;min-height:122px}
+.report-product-card b{font-size:16px;line-height:1.25}
+.report-product-card span{font-size:12px;line-height:1.35}
+.compact-stock-card{min-height:92px;padding:13px}
+.compact-stock-card b{font-size:15px}
+.compact-stock-card small,.compact-stock-card span{font-size:12px}
+.point-tabs button{font-size:15px}
+.point-book h2{font-size:21px}
+.point-book .book-title>div>span{font-size:12px}
+.point-kpis>div{padding:14px}
+.point-kpis>div>b{font-size:24px}
+.point-kpis>div>span{font-size:12px}
+.point-kpis>div>small{font-size:11px}
+.evening-summary-grid>div{padding:13px}
+.evening-summary-grid b{font-size:20px}
+.evening-summary-grid small,.evening-summary-grid span{font-size:11px}
+.money-grid input,.expense-entry input,.expense-entry select,.stock-add-fields input{min-height:44px;font-size:15px}
+.primary.large{min-height:48px;font-size:15px}
+@media(max-width:760px){
+  body{font-size:15px}
+  .point-page{padding:10px 10px 24px}
+  .topbar{padding:9px 10px}
+  .brand-title{font-size:18px}.brand-sub{font-size:11px}
+  .point-hero h1{font-size:29px;line-height:1.08}.point-hero p{font-size:13px;line-height:1.4}
+  .point-tabs{gap:5px;margin-bottom:10px}.point-tabs button{font-size:14px;min-height:48px;padding:12px 7px}
+  .point-kpis{gap:7px}.point-kpis>div{min-height:94px;padding:12px}.point-kpis>div>b{font-size:22px}.point-kpis>div>span{font-size:12px}
+  .point-book{border-radius:14px;padding:12px;margin-bottom:10px}
+  .point-book h2{font-size:20px}.point-book .book-title>div>span{font-size:12px;line-height:1.4}
+  .point-modebar{gap:6px}.point-modebar button{min-height:50px;font-size:14px;font-weight:900}
+  .point-sheet-row{min-width:0!important;grid-template-columns:1.15fr .85fr!important;gap:8px!important;padding:12px 10px!important}
+  .point-sheet-row .p-name{grid-column:1/-1}
+  .point-sheet-row .p-name b{font-size:16px}.point-sheet-row .p-name small{font-size:11px}
+  .point-sheet-row .p-stock{font-size:13px!important;min-height:44px;display:flex;align-items:center;padding:0 10px;background:#f0f2e8;border-radius:10px}
+  .point-sheet-row input{min-height:48px;font-size:16px!important;border-radius:10px}
+  .entry-summary{padding:14px}.entry-summary-top b{font-size:20px}.entry-total strong{font-size:25px}
+  .evening-summary-grid{gap:7px}.evening-summary-grid>div{min-height:94px;padding:12px}.evening-summary-grid b{font-size:19px}
+  .cash-check{font-size:13px}.cash-check b{font-size:17px}
+  .expense-entry{gap:7px}.expense-entry input,.expense-entry select{min-height:48px;font-size:16px}
+  .expense-row{font-size:14px;padding:12px 10px}.expense-row strong{font-size:16px}
+  .employee-inline input{min-height:48px;font-size:16px}.employee-inline button{min-height:48px;font-size:14px}
+  .day-ledger{border-radius:12px}.ledger-row{grid-template-columns:1fr!important;min-height:0;padding:14px 12px;gap:9px}.ledger-meta b{font-size:12px}.ledger-time{font-size:12px}.ledger-main strong{font-size:17px}.ledger-person{font-size:14px!important}.ledger-items{gap:6px}.ledger-items span{font-size:13px;padding:8px 9px;line-height:1.25}.ledger-total{font-size:17px;text-align:left}
+  .stock-admin-grid{gap:9px}.stock-add-fields{gap:7px}.stock-add-fields input{min-height:48px;font-size:16px}.stock-add-fields .primary{min-height:48px;font-size:15px}
+  .stock-grid-wide{grid-template-columns:1fr 1fr!important;gap:7px}.compact-stock-card{min-height:102px;padding:12px}.compact-stock-card b{font-size:15px}.compact-stock-card span{font-size:11px}
+  .report-toolbar .period-chips .chip{min-height:44px;font-size:14px}.report-toolbar .report-dates input{min-height:48px;font-size:16px}
+  .report-kpis{gap:7px}.report-kpis>div{min-height:96px;padding:12px}.report-kpis b{font-size:21px}
+  .report-row{min-height:58px;padding:12px;font-size:14px}.report-row strong{font-size:16px}
+  .report-product-grid{gap:7px}.report-product-card{min-height:144px;padding:13px}.report-product-card b{font-size:16px}.report-product-card span{font-size:12px}
+}
+@media(min-width:761px){.point-page{font-size:15px}.ledger-row{grid-template-columns:1.05fr 1.9fr .75fr}.point-sheet-row input{font-size:15px}}
+
+/* V12.1 Desktop UX: larger, calmer typography and controls on computer too */
+@media (min-width:1101px){
+  .point-page{padding-top:26px;padding-bottom:42px}
+  .point-hero h1{font-size:34px;line-height:1.15}
+  .point-hero p{font-size:16px;line-height:1.45}
+  .eyebrow{font-size:12px}
+  .day-state{padding:12px 16px}
+  .day-state span{font-size:11px}
+  .day-state b{font-size:15px}
+  .point-kpis{gap:12px;margin-bottom:16px}
+  .point-kpis>div{padding:16px 17px;border-radius:16px}
+  .point-kpis span{font-size:13px}
+  .point-kpis b{font-size:24px}
+  .point-kpis small{font-size:12px}
+  .point-book{padding:20px;border-radius:20px;margin-bottom:16px}
+  .book-title{margin-bottom:16px}
+  .book-title h2{font-size:22px}
+  .book-title span{font-size:13px}
+  .quick-tags span{font-size:12px;padding:6px 10px}
+  .point-modebar{gap:8px;padding:5px}
+  .point-modebar button{padding:14px 13px;font-size:15px}
+  .entry-meta{margin-bottom:12px}
+  .entry-meta label,.money-grid label{font-size:13px}
+  .entry-meta select,.money-grid input,.entry-meta input{min-width:240px;padding:11px 13px;font-size:16px}
+  .point-sheet-head{padding:11px 13px;font-size:13px}
+  .point-sheet-row{padding:10px 12px;min-height:54px}
+  .point-sheet-row input{padding:10px 11px;font-size:16px}
+  .p-name b{font-size:17px}
+  .p-name small{font-size:12px}
+  .p-stock{font-size:14px}
+  .entry-summary{padding:18px;border-radius:16px}
+  .entry-summary-top{font-size:13px}
+  .entry-summary-top b{font-size:20px}
+  .entry-total{padding:14px 0}
+  .entry-total small{font-size:12px}
+  .entry-total strong{font-size:28px}
+  .entry-summary p{font-size:13px}
+  .ghost-btn{font-size:14px;padding:10px 13px}
+  .compact-stock-grid{gap:10px}
+  .compact-stock-card{padding:13px;border-radius:14px}
+  .compact-stock-card b{font-size:15px}
+  .compact-stock-card small{font-size:11px}
+  .compact-stock-card strong{font-size:18px}
+  .compact-stock-card span{font-size:12px}
+  .evening-summary-grid{gap:10px}
+  .evening-summary-grid>div{padding:13px}
+  .evening-summary-grid small{font-size:11px}
+  .evening-summary-grid b{font-size:19px}
+  .evening-summary-grid span{font-size:11px}
+  .notebook-box{padding:15px}
+  .notebook-title{font-size:12px}
+  .money-grid{gap:10px}
+  .cash-check{font-size:13px}
+  .cash-check b{font-size:17px}
+  .evening-actions button{min-height:48px;font-size:15px}
+  .primary-dark{font-size:15px;padding:12px 14px}
+  .expense-entry{gap:9px}
+  .expense-entry input,.expense-entry select,.employee-inline input{padding:11px 12px;font-size:16px}
+  .expense-head{font-size:11px;padding:11px 12px}
+  .expense-row{font-size:13px;padding:11px 12px}
+  .employee-inline button{font-size:14px;padding:10px 13px}
+  .day-ledger{border-radius:14px}
+  .ledger-row{padding:12px 14px}
+  .ledger-main b{font-size:12px}
+  .ledger-main strong{font-size:15px}
+  .ledger-main span{font-size:13px}
+  .ledger-items span{font-size:12px;padding:6px 8px}
+  .ledger-total{font-size:15px}
+  .point-footer{font-size:12px}
+
+  .point-tabs button{padding:14px 16px;font-size:15px}
+  .stock-add-card,.stock-totals-card{padding:16px}
+  .stock-add-fields input{padding:11px 12px;font-size:16px}
+  .stock-totals-card span{font-size:12px}
+  .stock-totals-card b{font-size:32px}
+  .stock-totals-card small{font-size:12px}
+  .report-row{padding:13px 14px}
+  .report-row b{font-size:15px}
+  .report-row small{font-size:11px}
+  .report-row strong{font-size:17px}
+  .report-product-card{padding:13px 14px}
+  .report-product-card b{font-size:16px}
+  .report-product-card span{font-size:12px}
+}
