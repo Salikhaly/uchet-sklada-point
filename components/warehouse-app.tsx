@@ -63,7 +63,7 @@ export default function WarehouseApp({userEmail='',profile=null}:{userEmail?:str
       supabase.from('contractors').select('id,name,group_id,archived_at,contractor_groups(id,name,archived_at)').is('archived_at',null).order('name'),
       supabase.from('contractor_groups').select('id,name,archived_at').is('archived_at',null).order('name'),
       supabase.rpc('dashboard_summary'),
-      supabase.from('operations').select('id,operation_number,operation_date,type,role,status,version,contractor_id,created_at,contractors(name,contractor_groups(name)),operation_items(product_id,quantity_kg,unit_price,total_amount,waste_kg,cogs_amount,products(name))').order('operation_date',{ascending:false}).order('created_at',{ascending:false}).limit(200)
+      supabase.from('operations').select('id,operation_number,operation_date,type,role,status,version,contractor_id,created_at,contractors(name,contractor_groups(name)),operation_items(product_id,quantity_kg,unit_price,total_amount,waste_kg,cogs_amount,products(name,sort_order))').order('operation_date',{ascending:false}).order('created_at',{ascending:false}).limit(200)
     ]);
     if(ps.error||cs.error||gs.error||st.error||os.error){notify([ps.error,cs.error,gs.error,st.error,os.error].find(Boolean)?.message||'Ошибка загрузки');setLoading(false);return;}
     setProducts((ps.data||[]) as Product[]);
@@ -73,7 +73,7 @@ export default function WarehouseApp({userEmail='',profile=null}:{userEmail?:str
     setStock(st.data||[]); setOps((os.data||[]).map((o:any)=>mapOp(o)));
     setLoading(false);
   }
-  function mapOp(o:any):Operation{return {...o,contractor_name:o.contractors?.name||'',group_name:o.contractors?.contractor_groups?.name||null,items:(o.operation_items||[]).map((i:any)=>({product_id:i.product_id,product_name:i.products?.name||'',kg:num(i.quantity_kg),price:num(i.unit_price),sum:num(i.total_amount),wasteKg:num(i.waste_kg),cogs:num(i.cogs_amount)}))};}
+  function mapOp(o:any):Operation{const items=(o.operation_items||[]).map((i:any)=>({product_id:i.product_id,product_name:i.products?.name||'',kg:num(i.quantity_kg),price:num(i.unit_price),sum:num(i.total_amount),wasteKg:num(i.waste_kg),cogs:num(i.cogs_amount),_so:num(i.products?.sort_order)})).sort((a:any,b:any)=>a._so-b._so||a.product_name.localeCompare(b.product_name,'ru'));return {...o,contractor_name:o.contractors?.name||'',group_name:o.contractors?.contractor_groups?.name||null,items};}
   useEffect(()=>{loadData();loadMonitorReport();},[]);
   useEffect(()=>{ if(!undoCancel) return; if(undoCancel.seconds<=0){setUndoCancel(null);return;} const t=window.setTimeout(()=>setUndoCancel(x=>x?{...x,seconds:x.seconds-1}:null),1000); return ()=>window.clearTimeout(t); },[undoCancel]);
 
