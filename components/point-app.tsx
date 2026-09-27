@@ -6,11 +6,12 @@ import { createClient } from '@/lib/supabase/client';
 type Product = { id:string; name:string; default_price:number; status:string; sort_order?:number };
 type Contractor = { id:string; name:string; group_id:string|null; group_name?:string|null };
 type Employee = { id:string; name:string };
+type ExpenseCategory = { id:string; name:string };
 type StockRow = { product_id:string; product_name:string; quantity_kg:number; avg_cost:number; inventory_value:number };
 type Group = { id:string; name:string };
 type OperationItem = { product_id:string; product_name:string; kg:number; price:number; sum:number; wasteKg:number; cogs:number };
 type Operation = { id:string; operation_number:number; operation_date:string; type:'ARRIVAL'|'SHIPMENT'; role:string; status:string; contractor_id:string; contractor_name:string; created_at:string; note?:string; items:OperationItem[] };
-type PointState = { products:Product[]; contractors:Contractor[]; groups:Group[]; employees:Employee[]; stock:StockRow[]; operations:Operation[] };
+type PointState = { products:Product[]; contractors:Contractor[]; groups:Group[]; employees:Employee[]; expenseCategories:ExpenseCategory[]; stock:StockRow[]; operations:Operation[] };
 type EntryMode='PURCHASE'|'SHIPMENT'|'SALE'|'TRANSFER';
 type Line = { kg:string; price:string; sum:string; sumTouched:boolean };
 type EvenTab='work'|'stock'|'report';
@@ -41,6 +42,7 @@ function mapState(raw:unknown):PointState{
     contractors:Array.isArray(obj.contractors)?obj.contractors as Contractor[]:[],
     groups:Array.isArray(obj.groups)?obj.groups as Group[]:[],
     employees:Array.isArray(obj.employees)?obj.employees as Employee[]:[],
+    expenseCategories:Array.isArray(obj.expense_categories)?obj.expense_categories as ExpenseCategory[]:[],
     stock:Array.isArray(obj.stock)?obj.stock as StockRow[]:[],
     operations:Array.isArray(obj.operations)?obj.operations as Operation[]:[],
   };
@@ -58,8 +60,9 @@ export default function PointApp(){
   const [rows,setRows]=useState<Record<string,Line>>({});
   const [evening,setEvening]=useState<EveningData|null>(null);
   const [eveningForm,setEveningForm]=useState({opening:'',brought:'',actual:''});
-  const [expense,setExpense]=useState({employeeId:'',category:'Еда',comment:'',amount:''});
+  const [expense,setExpense]=useState({employeeId:'',category:'',comment:'',amount:''});
   const [newEmployee,setNewEmployee]=useState('');
+  const [newCategory,setNewCategory]=useState('');
   const [shipmentContractor,setShipmentContractor]=useState('');
   const [audit,setAudit]=useState<AuditRow[]>([]);
   const [report,setReport]=useState<PointReport|null>(null);
@@ -182,7 +185,7 @@ export default function PointApp(){
     const {error}=await supabase.rpc('point_add_evening_expense',{p_summary_id:evening.summary.id,p_employee_id:expense.employeeId||null,p_category:expense.category.trim(),p_comment:expense.comment,p_amount:num(expense.amount)});
     setBusy(false);
     if(error)return notify(error.message);
-    setExpense({employeeId:'',category:'Еда',comment:'',amount:''});
+    setExpense({employeeId:'',category:'',comment:'',amount:''});
     notify('Расход добавлен ✅');
     await loadEvening();
   }
@@ -197,6 +200,21 @@ export default function PointApp(){
     const {error}=await supabase.rpc('point_upsert_employee',{p_name:newEmployee.trim()});
     if(error)return notify(error.message);
     setNewEmployee('');notify('Сотрудник добавлен ✅');await load();
+  }
+  async function addExpenseCategory(){
+    const name=newCategory.trim();
+    if(!name)return notify('Введите название статьи');
+    setBusy(true);
+    const {error}=await supabase.rpc('point_upsert_expense_category',{p_name:name});
+    setBusy(false);
+    if(error)return notify(error.message);
+    setNewCategory('');notify('Статья добавлена ✅');await load();
+  }
+  async function removeExpenseCategory(id:string){
+    if(!window.confirm('Скрыть эту статью расхода? История с ней сохранится.'))return;
+    const {error}=await supabase.rpc('point_set_expense_category_active',{p_id:id,p_active:false});
+    if(error)return notify(error.message);
+    notify('Статья скрыта');await load();
   }
   async function addProduct(){
     const name=newProduct.name.trim();
@@ -307,7 +325,7 @@ export default function PointApp(){
 
         <section className="point-book evening-book"><div className="book-title"><div><div className="eyebrow">ГЛАВНОЕ ВЕЧЕРОМ</div><h2>2. Вечерняя сводка</h2><span>Ничего из проведённых операций заново не вводим — система сама подтягивает день.</span></div><div className="evening-badge">{status}</div></div><div className="evening-layout"><div className="evening-left"><div className="evening-summary-grid"><div><small>Закуплено</small><b>{qty(purchaseKg)} кг</b><span>{money(purchaseAmount)}</span></div><div><small>Отгружено</small><b>{qty(shipmentKg)} кг</b><span>из Точки</span></div><div><small>Продано</small><b>{qty(saleKg)} кг</b><span>{money(saleAmount)}</span></div><div><small>В Ангар</small><b>{qty(transferKg)} кг</b><span>перемещение</span></div></div><div className="notebook-box"><div className="notebook-title">Деньги</div><div className="money-grid"><label>Начальная касса<input type="number" value={eveningForm.opening} onChange={e=>setEveningForm(x=>({...x,opening:e.target.value}))}/></label><label>Принесли за день<input type="number" value={eveningForm.brought} onChange={e=>setEveningForm(x=>({...x,brought:e.target.value}))}/></label><label>Фактическая касса<input type="number" value={eveningForm.actual} onChange={e=>setEveningForm(x=>({...x,actual:e.target.value}))}/></label></div><div className="cash-check"><span>Ожидаемая касса</span><b>{expected==null?'—':money(expected)}</b><span>Расхождение</span><b className={variance==null?'':num(variance)===0?'ok':'warn'}>{variance==null?'—':money(variance)}</b></div></div></div><aside className="evening-actions"><button className="primary large" disabled={busy} onClick={saveEvening}>Сохранить сводку</button><button onClick={checkDay}>Проверить день</button><button className="primary-dark" onClick={closeDay}>Закрыть день</button>{status==='CLOSED'&&<button onClick={reopenDay}>Переоткрыть с причиной</button>}</aside></div></section>
 
-        <section className="point-book"><div className="book-title"><div><h2>3. Расходы сотрудников</h2><span>Еда · аванс · бензин · доставка · прочее.</span></div><b>{money(expTotal)}</b></div><div className="expense-entry"><select value={expense.employeeId} onChange={e=>setExpense(x=>({...x,employeeId:e.target.value}))}><option value="">Без сотрудника</option>{state.employees.map((e:Employee)=><option key={e.id} value={e.id}>{e.name}</option>)}</select><select value={expense.category} onChange={e=>setExpense(x=>({...x,category:e.target.value}))}><option>Еда</option><option>Аванс</option><option>Бензин</option><option>Доставка</option><option>Зарплата</option><option>Хозяйственные</option><option>Прочее</option></select><input placeholder="Комментарий" value={expense.comment} onChange={e=>setExpense(x=>({...x,comment:e.target.value}))}/><input type="number" placeholder="Сумма" value={expense.amount} onChange={e=>setExpense(x=>({...x,amount:e.target.value}))}/><button className="primary" onClick={addExpense}>＋ Добавить</button></div><div className="expense-table"><div className="expense-head"><span>Сотрудник</span><span>Категория</span><span>Комментарий</span><span>Сумма</span><span></span></div>{exps.map((e:EveningExpense)=><div className="expense-row" key={e.id}><b>{e.employee_name||'Без сотрудника'}</b><span>{e.category}</span><span>{e.comment||'—'}</span><strong>{money(e.amount)}</strong><button onClick={()=>removeExpense(e.id)}>×</button></div>)}{!exps.length&&<div className="empty-state compact">За этот день расходов пока нет.</div>}</div><div className="employee-inline"><input placeholder="Добавить сотрудника" value={newEmployee} onChange={e=>setNewEmployee(e.target.value)}/><button onClick={addEmployee}>Сохранить сотрудника</button><span>Всего сотрудников: {state.employees.length}</span></div></section>
+        <section className="point-book"><div className="book-title"><div><h2>3. Расходы сотрудников</h2><span>Еда · аванс · бензин · доставка · прочее.</span></div><b>{money(expTotal)}</b></div><div className="expense-entry"><select value={expense.employeeId} onChange={e=>setExpense(x=>({...x,employeeId:e.target.value}))}><option value="">Без сотрудника</option>{state.employees.map((e:Employee)=><option key={e.id} value={e.id}>{e.name}</option>)}</select><select value={expense.category} onChange={e=>setExpense(x=>({...x,category:e.target.value}))}><option value="">Выберите статью</option>{state.expenseCategories.map((c:ExpenseCategory)=><option key={c.id} value={c.name}>{c.name}</option>)}</select><input placeholder="Комментарий" value={expense.comment} onChange={e=>setExpense(x=>({...x,comment:e.target.value}))}/><input type="number" placeholder="Сумма" value={expense.amount} onChange={e=>setExpense(x=>({...x,amount:e.target.value}))}/><button className="primary" onClick={addExpense}>＋ Добавить</button></div><div className="expense-table"><div className="expense-head"><span>Сотрудник</span><span>Категория</span><span>Комментарий</span><span>Сумма</span><span></span></div>{exps.map((e:EveningExpense)=><div className="expense-row" key={e.id}><b>{e.employee_name||'Без сотрудника'}</b><span>{e.category}</span><span>{e.comment||'—'}</span><strong>{money(e.amount)}</strong><button onClick={()=>removeExpense(e.id)}>×</button></div>)}{!exps.length&&<div className="empty-state compact">За этот день расходов пока нет.</div>}</div><div className="employee-inline"><input placeholder="Добавить сотрудника" value={newEmployee} onChange={e=>setNewEmployee(e.target.value)}/><button onClick={addEmployee}>Сохранить сотрудника</button><span>Всего сотрудников: {state.employees.length}</span></div><div className="employee-inline category-inline"><input placeholder="Новая статья расхода" value={newCategory} onChange={e=>setNewCategory(e.target.value)}/><button onClick={addExpenseCategory}>Сохранить статью</button><div className="category-chip-list">{state.expenseCategories.map((c:ExpenseCategory)=><span className="category-chip" key={c.id}>{c.name}<button onClick={()=>removeExpenseCategory(c.id)} title="Скрыть статью">×</button></span>)}{!state.expenseCategories.length&&<span>Статей пока нет</span>}</div></div></section>
 
         <section className="point-book"><div className="book-title clickable-section" onClick={()=>setCollapsed(x=>({...x,journal:!x.journal}))}><div><h2>4. Что прошло за день</h2><span>Последняя добавленная накладная всегда сверху.</span></div><b>{collapsed.journal?'＋':'−'}</b></div>{!collapsed.journal&&<div className="day-ledger">{dayOps.length?dayOps.map(o=>{const isSale=o.note?.startsWith('[SALE]');const isTransfer=o.note?.startsWith('[TRANSFER_TO_ANGAR]');const isArrival=o.type==='ARRIVAL';const action=isSale?'ПРОДАЖА':isTransfer?'В АНГАР':isArrival?'ПРИЁМКА':'ОТГРУЗКА';const verb=isSale?'Продал':isTransfer?'Переместил':isArrival?'Привёз':'Увёз';const time=new Date(o.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});return <div className={`ledger-row ${isArrival?'in':'out'}`} key={o.id}><div className="ledger-main"><div className="ledger-meta"><b>№{o.operation_number}</b><span className="ledger-time">{time}</span></div><strong>{action}</strong><span className="ledger-person">{o.contractor_name} · {verb}</span></div><div className="ledger-items">{sortItems(o.items).map(i=><span key={i.product_id}><b>{i.product_name}</b> · {qty(i.kg)} кг · {money(i.sum)}</span>)}</div><div className="ledger-total">{money(o.items.reduce((s:number,i:OperationItem)=>s+i.sum,0))}</div></div>}) : <div className="empty-state compact">Сегодня операций ещё нет.</div>}</div>}</section>
       </>}
