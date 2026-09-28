@@ -18,6 +18,8 @@ type EvenTab='work'|'stock'|'report';
 type EveningExpense = { id:string; employee_name?:string|null; category:string; comment?:string|null; amount:number; is_loan?:boolean; repaid?:number };
 type Repayment = { id:string; amount:number; note?:string|null; employee_name?:string|null; given_date?:string; category?:string };
 type LoanRow = { expense_id:string; given_date:string; employee_name:string; category:string; comment?:string|null; amount:number; repaid:number; remaining:number; status:'UNPAID'|'PARTIAL'|'PAID'; repayments:Array<{id:string;date:string;amount:number;note?:string|null}> };
+type EditItem = { product_id:string; name:string; kg:string; price:string; wasteKg:number };
+type EditOp = { id:string; number:number; contractorId:string; date:string; items:EditItem[]; addProduct:string };
 const loanLabel={UNPAID:'Не погашен',PARTIAL:'Частично погашен',PAID:'Погашен'} as const;
 type EveningSummary = { id?:string; opening_cash?:number|null; brought_cash?:number|null; actual_cash?:number|null; expected_cash?:number|null; variance?:number|null; status?:string; close_comment?:string|null; note?:string|null };
 type EveningData = { summary?: EveningSummary; expenses?: EveningExpense[]; repayments?: Repayment[]; repayments_amount?:number };
@@ -65,6 +67,7 @@ export default function PointApp(){
   const [eveningForm,setEveningForm]=useState({opening:'',brought:'',actual:''});
   const [closeComment,setCloseComment]=useState('');
   const [loans,setLoans]=useState<LoanRow[]>([]);
+  const [editOp,setEditOp]=useState<EditOp|null>(null);
   const [showPaidLoans,setShowPaidLoans]=useState(false);
   const [dayInfo,setDayInfo]=useState<{report:PointReport;evening:EveningData}|null>(null);
   const [expense,setExpense]=useState({employeeId:'',category:'',comment:'',amount:'',isLoan:false});
@@ -105,6 +108,39 @@ export default function PointApp(){
     const s:EveningSummary=parsed?.summary??{};
     setEveningForm({opening:s.opening_cash==null?'':String(s.opening_cash),brought:s.brought_cash==null?'':String(s.brought_cash),actual:s.actual_cash==null?'':String(s.actual_cash)});
     setCloseComment(s.close_comment??'');
+  }
+  function startEdit(o:Operation){
+    setEditOp({id:o.id,number:o.operation_number,contractorId:o.contractor_id,date:o.operation_date,addProduct:'',items:sortItems(o.items).map((i:OperationItem)=>({product_id:i.product_id,name:i.product_name,kg:String(i.kg),price:String(i.price),wasteKg:i.wasteKg}))});
+  }
+  function patchEditItem(idx:number,patch:Partial<EditItem>){setEditOp(e=>e?{...e,items:e.items.map((it:EditItem,i:number)=>i===idx?{...it,...patch}:it)}:e);}
+  function addEditProduct(id:string){
+    const pr=activeProducts.find((x:Product)=>x.id===id);
+    if(!pr)return;
+    setEditOp(e=>e?{...e,addProduct:'',items:[...e.items,{product_id:pr.id,name:pr.name,kg:'',price:String(pr.default_price||''),wasteKg:0}].sort((a:EditItem,b:EditItem)=>(productOrder.get(a.product_id)??9999)-(productOrder.get(b.product_id)??9999))}:e);
+  }
+  async function saveEdit(){
+    if(!editOp)return;
+    const items=editOp.items.filter((i:EditItem)=>num(i.kg)>0).map((i:EditItem)=>({product_id:i.product_id,name:i.name,kg:num(i.kg),price:num(i.price),wasteKg:i.wasteKg}));
+    if(!items.length)return notify('В накладной должен остаться хотя бы один товар с весом');
+    if(!editOp.contractorId)return notify('Выберите контрагента');
+    setBusy(true);
+    const {error}=await supabase.rpc('point_update_operation',{p_operation_id:editOp.id,p_contractor_id:editOp.contractorId,p_operation_date:editOp.date,p_items:items,p_note:null});
+    setBusy(false);
+    if(error)return notify(error.message);
+    notify('Накладная изменена ✅');
+    setEditOp(null);
+    await Promise.all([load(),loadEvening(),loadAudit()]);
+    if(tab==='report')await loadDayInfo();
+  }
+  async function deleteOp(o:Operation){
+    const total=o.items.reduce((s2:number,i:OperationItem)=>s2+i.sum,0);
+    if(!window.confirm(`Удалить накладную №${o.operation_number} (${o.contractor_name}, ${money(total)})?\nОстатки и себестоимость пересчитаются. Действие попадёт в журнал.`))return;
+    const {error}=await supabase.rpc('point_delete_operation',{p_operation_id:o.id});
+    if(error)return notify(error.message);
+    notify('Накладная удалена');
+    if(editOp?.id===o.id)setEditOp(null);
+    await Promise.all([load(),loadEvening(),loadAudit()]);
+    if(tab==='report')await loadDayInfo();
   }
   async function loadLoans(){
     const {data,error}=await supabase.rpc('point_get_loans');
@@ -302,6 +338,13 @@ export default function PointApp(){
 
   const stockMap=new Map<string,StockRow>(state.stock.map((x:StockRow)=>[x.product_id,x]));
   const productOrder=new Map<string,number>(activeProducts.map((p:Product,i:number)=>[p.id,i]));
+  const editPanel=(o:Operation)=>{
+    const e=editOp!;
+    const used=new Set(e.items.map((i:EditItem)=>i.product_id));
+    const free=activeProducts.filter((x:Product)=>!used.has(x.id));
+    const total=e.items.reduce((s2:number,i:EditItem)=>s2+num(i.kg)*num(i.price),0);
+    return <div className="ledger-edit" key={o.id}><div className="ledger-edit-head"><b>Правка накладной №{e.number}</b><span>Итого: {money(Math.round(total*100)/100)}</span></div><div className="ledger-edit-top"><label>Контрагент<select value={e.contractorId} onChange={ev=>setEditOp(x=>x?{...x,contractorId:ev.target.value}:x)}>{state.contractors.map((c:Contractor)=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Дата<input type="date" value={e.date} max={today()} onChange={ev=>setEditOp(x=>x?{...x,date:ev.target.value}:x)}/></label></div><div className="ledger-edit-items">{e.items.map((it:EditItem,idx:number)=><div className="ledger-edit-item" key={it.product_id}><b>{it.name}</b><label>кг<input type="number" step="0.001" value={it.kg} onChange={ev=>patchEditItem(idx,{kg:ev.target.value})}/></label><label>цена ₸/кг<input type="number" step="0.01" value={it.price} onChange={ev=>patchEditItem(idx,{price:ev.target.value})}/></label><span>{money(Math.round(num(it.kg)*num(it.price)*100)/100)}</span><button title="Убрать товар из накладной" onClick={()=>setEditOp(x=>x?{...x,items:x.items.filter((_:EditItem,i:number)=>i!==idx)}:x)}>×</button></div>)}</div><div className="ledger-edit-add"><select value={e.addProduct} onChange={ev=>addEditProduct(ev.target.value)}><option value="">＋ Добавить товар в накладную</option>{free.map((x:Product)=><option key={x.id} value={x.id}>{x.name}</option>)}</select></div><div className="ledger-edit-buttons"><button className="primary" disabled={busy} onClick={saveEdit}>Сохранить изменения</button><button onClick={()=>setEditOp(null)}>Отмена</button></div></div>;
+  };
   const sortItems=(items:OperationItem[])=>[...items].sort((a:OperationItem,b:OperationItem)=>(productOrder.get(a.product_id)??9999)-(productOrder.get(b.product_id)??9999));
   const dayOps:Operation[]=state.operations.filter((o:Operation)=>o.operation_date===date).sort((a:Operation,b:Operation)=>{const bd=new Date(b.created_at).getTime(),ad=new Date(a.created_at).getTime();return bd-ad||b.operation_number-a.operation_number;});
   const purchaseOps=dayOps.filter((o:Operation)=>o.role==='ARRIVAL');
@@ -382,7 +425,7 @@ export default function PointApp(){
         <section className="point-book loans-book"><div className="book-title"><div><div className="eyebrow">ДОЛГИ</div><h2>Долги и внесения</h2><span>Кто должен вернуть деньги и сколько уже внесено. Внесение записывается на выбранный рабочий день и попадает в кассу этого дня.</span></div><b className={openLoans.length?'warn':'ok'}>{openLoans.length?`Осталось вернуть: ${money(openRemaining)}`:'Долгов нет'}</b></div>{(evening?.repayments?.length??0)>0&&<div className="repay-today"><b>Внесено сегодня: {money(evening?.repayments_amount)}</b>{(evening?.repayments??[]).map((r:Repayment)=><span key={r.id}>{r.employee_name||'—'} · {money(r.amount)}{r.note?` · ${r.note}`:''} <button onClick={()=>removeRepayment(r.id)} title="Удалить внесение">×</button></span>)}</div>}<div className="loan-list">{shownLoans.map((l:LoanRow)=><div className={`loan-row ${l.status.toLowerCase()}`} key={l.expense_id}><div className="loan-main"><b>{l.employee_name}</b><span>{l.given_date} · {l.category}{l.comment?` · ${l.comment}`:''}</span><em className={`loan-badge ${l.status==='PAID'?'paid':l.status==='PARTIAL'?'partial':'unpaid'}`}>{loanLabel[l.status]}</em></div><div className="loan-progress"><div className="info-track"><i className="plus" style={{width:Math.min(100,num(l.repaid)/Math.max(1,num(l.amount))*100)+'%'}}/></div><span>Выдано {money(l.amount)} · вернули {money(l.repaid)} · осталось <b>{money(l.remaining)}</b></span>{l.repayments.length>0&&<small>{l.repayments.map(r=>`${r.date}: ${money(r.amount)}`).join(' · ')}</small>}</div>{l.status!=='PAID'&&<button className="primary" onClick={()=>addRepayment(l)}>＋ Внесение</button>}</div>)}{!loans.length&&<div className="empty-state compact">Долгов пока нет. Чтобы записать долг, при добавлении расхода отметьте «В долг».</div>}{paidLoans.length>0&&<button className="link-btn" onClick={()=>setShowPaidLoans(v=>!v)}>{showPaidLoans?'Скрыть погашенные':`Показать погашенные (${paidLoans.length})`}</button>}</div></section>
         <section className="point-book"><div className="book-title"><div><h2>3. Расходы сотрудников</h2><span>Еда · аванс · бензин · доставка · прочее.</span></div><b>{money(expTotal)}</b></div><div className="expense-entry"><select value={expense.employeeId} onChange={e=>setExpense(x=>({...x,employeeId:e.target.value}))}><option value="">Без сотрудника</option>{state.employees.map((e:Employee)=><option key={e.id} value={e.id}>{e.name}</option>)}</select><select value={expense.category} onChange={e=>setExpense(x=>({...x,category:e.target.value}))}><option value="">Выберите статью</option>{state.expenseCategories.map((c:ExpenseCategory)=><option key={c.id} value={c.name}>{c.name}</option>)}</select><input placeholder="Комментарий" value={expense.comment} onChange={e=>setExpense(x=>({...x,comment:e.target.value}))}/><input type="number" placeholder="Сумма" value={expense.amount} onChange={e=>setExpense(x=>({...x,amount:e.target.value}))}/><label className="loan-check"><input type="checkbox" checked={expense.isLoan} onChange={e=>setExpense(x=>({...x,isLoan:e.target.checked}))}/>В долг</label><button className="primary" onClick={addExpense}>＋ Добавить</button></div><div className="expense-table"><div className="expense-head"><span>Сотрудник</span><span>Категория</span><span>Комментарий</span><span>Сумма</span><span></span></div>{exps.map((e:EveningExpense)=><div className="expense-row" key={e.id}><b>{e.employee_name||'Без сотрудника'}</b><span>{e.category}</span><span>{e.comment||'—'}{e.is_loan&&<em className={`loan-badge ${num(e.repaid)>=num(e.amount)?'paid':num(e.repaid)>0?'partial':'unpaid'}`}>{num(e.repaid)>=num(e.amount)?'Долг погашен':num(e.repaid)>0?`Долг: вернули ${money(e.repaid)} из ${money(e.amount)}`:'Долг: не возвращён'}</em>}</span><strong>{money(e.amount)}</strong><button onClick={()=>removeExpense(e.id)}>×</button></div>)}{!exps.length&&<div className="empty-state compact">За этот день расходов пока нет.</div>}</div><div className="employee-inline"><input placeholder="Добавить сотрудника" value={newEmployee} onChange={e=>setNewEmployee(e.target.value)}/><button onClick={addEmployee}>Сохранить сотрудника</button><span>Всего сотрудников: {state.employees.length}</span></div><div className="employee-inline category-inline"><input placeholder="Новая статья расхода" value={newCategory} onChange={e=>setNewCategory(e.target.value)}/><button onClick={addExpenseCategory}>Сохранить статью</button><div className="category-chip-list">{state.expenseCategories.map((c:ExpenseCategory)=><span className="category-chip" key={c.id}>{c.name}<button onClick={()=>removeExpenseCategory(c.id)} title="Скрыть статью">×</button></span>)}{!state.expenseCategories.length&&<span>Статей пока нет</span>}</div></div></section>
 
-        <section className="point-book"><div className="book-title clickable-section" onClick={()=>setCollapsed(x=>({...x,journal:!x.journal}))}><div><h2>4. Что прошло за день</h2><span>Последняя добавленная накладная всегда сверху.</span></div><b>{collapsed.journal?'＋':'−'}</b></div>{!collapsed.journal&&<div className="day-ledger">{dayOps.length?dayOps.map(o=>{const isSale=o.note?.startsWith('[SALE]');const isTransfer=o.note?.startsWith('[TRANSFER_TO_ANGAR]');const isArrival=o.type==='ARRIVAL';const action=isSale?'ПРОДАЖА':isTransfer?'В АНГАР':isArrival?'ПРИЁМКА':'ОТГРУЗКА';const verb=isSale?'Продал':isTransfer?'Переместил':isArrival?'Привёз':'Увёз';const time=new Date(o.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});return <div className={`ledger-row ${isArrival?'in':'out'}`} key={o.id}><div className="ledger-main"><div className="ledger-meta"><b>№{o.operation_number}</b><span className="ledger-time">{time}</span></div><strong>{action}</strong><span className="ledger-person">{o.contractor_name} · {verb}</span></div><div className="ledger-items">{sortItems(o.items).map(i=><span key={i.product_id}><b>{i.product_name}</b> · {qty(i.kg)} кг · {money(i.sum)}</span>)}</div><div className="ledger-total">{money(o.items.reduce((s:number,i:OperationItem)=>s+i.sum,0))}</div></div>}) : <div className="empty-state compact">Сегодня операций ещё нет.</div>}</div>}</section>
+        <section className="point-book"><div className="book-title clickable-section" onClick={()=>setCollapsed(x=>({...x,journal:!x.journal}))}><div><h2>4. Что прошло за день</h2><span>Последняя добавленная накладная всегда сверху. Накладную можно изменить или удалить, пока день не закрыт.</span></div><b>{collapsed.journal?'＋':'−'}</b></div>{!collapsed.journal&&<div className="day-ledger">{dayOps.length?dayOps.map(o=>{const isSale=o.note?.startsWith('[SALE]');const isTransfer=o.note?.startsWith('[TRANSFER_TO_ANGAR]');const isArrival=o.type==='ARRIVAL';const action=isSale?'ПРОДАЖА':isTransfer?'В АНГАР':isArrival?'ПРИЁМКА':'ОТГРУЗКА';const verb=isSale?'Продал':isTransfer?'Переместил':isArrival?'Привёз':'Увёз';const time=new Date(o.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});if(editOp?.id===o.id)return editPanel(o);return <div className={`ledger-row ${isArrival?'in':'out'}`} key={o.id}><div className="ledger-main"><div className="ledger-meta"><b>№{o.operation_number}</b><span className="ledger-time">{time}</span></div><strong>{action}</strong><span className="ledger-person">{o.contractor_name} · {verb}</span></div><div className="ledger-items">{sortItems(o.items).map(i=><span key={i.product_id}><b>{i.product_name}</b> · {qty(i.kg)} кг · {money(i.sum)}</span>)}</div><div className="ledger-total">{money(o.items.reduce((s:number,i:OperationItem)=>s+i.sum,0))}{!isTransfer&&status!=='CLOSED'&&<div className="ledger-actions"><button title="Изменить" onClick={()=>startEdit(o)}>✎ Изменить</button><button className="danger" title="Удалить" onClick={()=>deleteOp(o)}>🗑 Удалить</button></div>}{status==='CLOSED'&&<small className="ledger-locked">день закрыт</small>}</div></div>}) : <div className="empty-state compact">Сегодня операций ещё нет.</div>}</div>}</section>
       </>}
 
       {tab==='stock'&&<>
