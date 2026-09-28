@@ -374,3 +374,12 @@
 .info-prod{display:grid;grid-template-columns:120px 1fr 110px;gap:10px;align-items:center;margin:6px 0;font-size:12px}.info-bars{display:grid;gap:3px}.info-bars .info-track{height:7px}.info-prod span{text-align:right;color:var(--muted);font-size:11px}
 .info-comment{margin-top:14px;padding:12px;border-radius:10px;background:#f6f1de;font-size:13px;white-space:pre-wrap}
 @media(max-width:760px){.info-row{grid-template-columns:110px 1fr 95px}.info-cols{grid-template-columns:1fr}.info-prod{grid-template-columns:90px 1fr 80px}}
+
+.loan-check{display:inline-flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap}.loan-check input{width:auto}
+.loan-badge{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;font-size:11px;font-style:normal;font-weight:600}.loan-badge.unpaid{background:#fde3e0;color:#a32a1c}.loan-badge.partial{background:#fdebd7;color:#a4520b}.loan-badge.paid{background:#e4f2dc;color:#2f6b1c}
+.loans-book .book-title b.warn,.report-screen .book-title b.warn{color:#a32a1c}.loans-book .book-title b.ok,.report-screen .book-title b.ok{color:#2f6b1c}
+.loan-list{display:grid;gap:10px;margin-top:12px}.loan-row{display:grid;grid-template-columns:1.1fr 1.6fr auto;gap:14px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff}.loan-row.paid{opacity:.65}
+.loan-main{display:grid;gap:3px}.loan-main span{font-size:12px;color:var(--muted)}.loan-progress{display:grid;gap:5px;font-size:12px}.loan-progress small{color:var(--muted)}
+.repay-today{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0;padding:10px 12px;border-radius:10px;background:#e4f2dc;font-size:13px}.repay-today button{border:0;background:transparent;color:#a32a1c;cursor:pointer}
+.link-btn{border:0;background:transparent;color:var(--muted);text-decoration:underline;cursor:pointer;justify-self:start}
+@media(max-width:760px){.loan-row{grid-template-columns:1fr}}
