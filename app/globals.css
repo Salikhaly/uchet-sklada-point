@@ -364,3 +364,13 @@
   .report-product-card b{font-size:16px}
   .report-product-card span{font-size:12px}
 }
+
+.day-comment textarea{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px;font:inherit;resize:vertical;background:#fff}.day-comment small{display:block;margin-top:6px;color:var(--muted);font-size:11px}
+.info-flow{display:grid;gap:8px;margin:12px 0}.info-row{display:grid;grid-template-columns:150px 1fr 130px;gap:10px;align-items:center;font-size:13px}.info-row b{text-align:right}.info-row.total{font-weight:700;border-top:1px dashed var(--border);padding-top:8px}
+.info-track{background:#eceee2;border-radius:6px;height:12px;overflow:hidden}.info-track i{display:block;height:100%;border-radius:6px}
+.info-track i.plus,.info-track i.buy{background:#5b8c3a}.info-track i.minus,.info-track i.sale{background:#d9822b}.info-track i.exp{background:#7a86c9}.info-track i.fact{background:#2f7f79}.info-track i.ship{background:#6a9bd1}
+.info-variance{margin-top:4px;padding:10px 12px;border-radius:10px;background:#f4f3ea;font-weight:700}.info-variance.ok{background:#e4f2dc;color:#2f6b1c}.info-variance.warn{background:#fdebd7;color:#a4520b}
+.info-cols{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;margin-top:14px}.info-legend{display:flex;gap:10px;font-size:11px;margin:6px 0}.info-legend em{font-style:normal;padding-left:14px;position:relative}.info-legend em:before{content:'';position:absolute;left:0;top:2px;width:10px;height:10px;border-radius:3px}.l-buy:before{background:#5b8c3a}.l-ship:before{background:#6a9bd1}.l-sale:before{background:#d9822b}
+.info-prod{display:grid;grid-template-columns:120px 1fr 110px;gap:10px;align-items:center;margin:6px 0;font-size:12px}.info-bars{display:grid;gap:3px}.info-bars .info-track{height:7px}.info-prod span{text-align:right;color:var(--muted);font-size:11px}
+.info-comment{margin-top:14px;padding:12px;border-radius:10px;background:#f6f1de;font-size:13px;white-space:pre-wrap}
+@media(max-width:760px){.info-row{grid-template-columns:110px 1fr 95px}.info-cols{grid-template-columns:1fr}.info-prod{grid-template-columns:90px 1fr 80px}}
