@@ -24,6 +24,7 @@ type DayRow = { date:string; status:string|null; ops:number; expenses:number; va
 type StocktakeItem = { product_name:string; system_kg:number; actual_kg:number; diff_kg:number; diff_cost:number };
 type Stocktake = { id:string; date:string; reason:string; created_at:string; user_name?:string|null; items:StocktakeItem[] };
 type EditExp = { id:string; employeeId:string; category:string; comment:string; amount:string; isLoan:boolean };
+type ReopenRow = { id:number; date:string; reason:string; user_name:string; created_at:string };
 type RepEmployee={employee_id:string;employee_name:string;expense_amount:number;loan_amount:number;total_amount:number;repaid_in_period:number;debt_remaining:number};
 type RepCategory={category:string;amount:number;count:number};
 type RepDay={date:string;status:string|null;purchase_amount:number;shipment_amount:number;sale_amount:number;expense_amount:number;loan_amount:number;repayment_amount:number;opening_cash:number|null;brought_cash:number|null;actual_cash:number|null;expected_cash:number|null;variance:number|null;ops:number;comment?:string|null};
@@ -84,6 +85,8 @@ export default function PointApp(){
   const [countReason,setCountReason]=useState('');
   const [editExp,setEditExp]=useState<EditExp|null>(null);
   const [newContractor,setNewContractor]=useState('');
+  const [reopens,setReopens]=useState<ReopenRow[]>([]);
+  const [clearPrices,setClearPrices]=useState(false);
   const [showPaidLoans,setShowPaidLoans]=useState(false);
   const [dayInfo,setDayInfo]=useState<{report:PointReport;evening:EveningData}|null>(null);
   const [expense,setExpense]=useState({employeeId:'',category:'',comment:'',amount:'',isLoan:false});
@@ -163,6 +166,11 @@ export default function PointApp(){
     const {data,error}=await supabase.rpc('point_get_days_overview',{p_days:30});
     if(error)return;
     setDays((Array.isArray(data)?data:[]) as unknown as DayRow[]);
+  }
+  async function loadReopens(){
+    const {data,error}=await supabase.rpc('point_get_reopens',{p_limit:30});
+    if(error)return;
+    setReopens((Array.isArray(data)?data:[]) as unknown as ReopenRow[]);
   }
   async function loadStocktakes(){
     const {data,error}=await supabase.rpc('point_get_stocktakes',{p_limit:20});
@@ -311,18 +319,26 @@ export default function PointApp(){
   useEffect(()=>{load();},[]);
   useEffect(()=>{loadEvening();loadAudit();loadLoans();},[date]);
   useEffect(()=>{if(tab==='report')loadDayInfo();},[tab,date]);
-  useEffect(()=>{loadDays();},[date,evening?.summary?.status,evening?.expenses?.length,state.operations.length]);
+  useEffect(()=>{loadDays();loadReopens();},[date,evening?.summary?.status,evening?.expenses?.length,state.operations.length]);
   useEffect(()=>{if(tab==='count')loadStocktakes();},[tab]);
   useEffect(()=>{if(tab==='report')loadReport();},[tab,reportFrom,reportTo]);
 
   function getLine(id:string):Line{
     const p=activeProducts.find((x:Product)=>x.id===id);
-    return rows[id]||{kg:'',price:String(p?.default_price??0),sum:'',sumTouched:false};
+    return rows[id]||{kg:'',price:clearPrices?'':String(p?.default_price??0),sum:'',sumTouched:false};
+  }
+  function toggleClearPrices(v:boolean){
+    setClearPrices(v);
+    setRows(prev=>{
+      const out:Record<string,Line>={...prev};
+      for(const p of activeProducts){const r=out[p.id]||{kg:'',price:'',sum:'',sumTouched:false};out[p.id]={...r,price:v?'':String(p.default_price??0),sumTouched:false};}
+      return out;
+    });
   }
   function updateLine(id:string,field:'kg'|'price'|'sum',value:string){
     setRows(prev=>{
       const p=activeProducts.find((x:Product)=>x.id===id);
-      const cur=prev[id]||{kg:'',price:String(p?.default_price??0),sum:'',sumTouched:false};
+      const cur=prev[id]||{kg:'',price:clearPrices?'':String(p?.default_price??0),sum:'',sumTouched:false};
       const next={...cur,[field]:value};
       const k=num(next.kg),pr=num(next.price),s=next.sum===''?null:num(next.sum);
       if(field==='kg'){
@@ -455,6 +471,7 @@ export default function PointApp(){
     if(!reason?.trim())return;
     const {error}=await supabase.rpc('point_reopen_day',{p_date:date,p_reason:reason.trim()});
     if(error)return notify(error.message);
+    await loadReopens();
     notify('День переоткрыт ✅');await loadEvening();
   }
 
@@ -568,6 +585,7 @@ export default function PointApp(){
           <div className="book-title"><div><h2>1. Операции дня</h2><span>Проводи здесь — они сразу попадут в журнал и вечерний итог.</span></div><div className="quick-tags"><span>{dayOps.length} операций</span><span>Точка</span></div></div>
           <div className="point-modebar">{([['PURCHASE','＋ Закуп из тетради'],['SHIPMENT','↗ Отгрузка'],['SALE','₸ Продажа'],['TRANSFER','→ В Ангар']] as const).map(([m,l]:readonly [EntryMode,string])=><button key={m} className={`${entryMode===m?'active ':''}${m.toLowerCase()}`} onClick={()=>{setEntryMode(m);clearEntry();}}>{l}</button>)}</div>
           {entryMode==='SHIPMENT'&&<div className="entry-meta"><label>Контрагент<select value={shipmentContractor} onChange={e=>setShipmentContractor(e.target.value)}><option value="">Выберите</option>{visibleContractors.map((c:Contractor)=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><div className="new-contractor"><input placeholder="Новый получатель" value={newContractor} onChange={e=>setNewContractor(e.target.value)}/><button disabled={busy} onClick={addContractorQuick}>＋ Добавить</button></div></div>}
+          <label className="check-wrap clear-prices-check"><input type="checkbox" checked={clearPrices} onChange={e=>toggleClearPrices(e.target.checked)}/> Стереть цены</label>
           <div className="point-entry-grid">
             <div className="point-sheet"><div className="point-sheet-head"><span>Товар</span><span>Остаток</span><span>Кг</span><span>₸/кг</span><span>Сумма</span></div>{activeProducts.map((p:Product)=>{const r=getLine(p.id);const s=stockMap.get(p.id);const stock=num(s?.quantity_kg);const entered=num(r.kg);const insufficient=(entryMode==='SHIPMENT'||entryMode==='SALE'||entryMode==='TRANSFER')&&entered>stock+0.000001;return <div className={`point-sheet-row ${entered>0?'filled':''} ${insufficient?'bad':''}`} key={p.id}><div className="p-name"><b>{p.name}</b><small>{money(p.default_price)}/кг прайс</small></div><div className="p-stock">{qty(stock)} кг</div><input type="number" min="0" step="0.001" placeholder="кг" value={r.kg} onChange={e=>updateLine(p.id,'kg',e.target.value)}/><input type="number" min="0" step="0.01" placeholder="₸/кг" value={r.price} disabled={entryMode==='TRANSFER'} onChange={e=>updateLine(p.id,'price',e.target.value)}/><input type="number" min="0" step="0.01" placeholder="сумма" value={r.sum} onChange={e=>updateLine(p.id,'sum',e.target.value)}/></div>;})}</div>
             <aside className="entry-summary"><div className="entry-summary-top"><span>{quickModeLabel}</span><b>{qty(entryKg)} кг</b></div><div className="entry-total">{entryMode==='TRANSFER'?<><small>Стоимость по средней себестоимости</small><strong>{money(entryItems().reduce((s,i)=>{const st=stockMap.get(i.product_id);return s+num(st?.avg_cost)*i.kg},0))}</strong></>:<><small>Итого операции</small><strong>{money(entryTotal)}</strong></>}</div>{entryMode==='PURCHASE'&&<p>Вводи вечерний итог по тетради. Каждая строка станет приходом в склад Точки.</p>}{entryMode==='SHIPMENT'&&<p>Отгрузка проводится сразу. Остаток и себестоимость пересчитываются автоматически.</p>}{entryMode==='SALE'&&<p>Продажа случайному покупателю. Себестоимость берётся из текущего среднего остатка.</p>}{entryMode==='TRANSFER'&&<p>Перемещение в Ангар не является продажей или расходом.</p>}{entryMode==='TRANSFER'?<button className="primary large" disabled={busy} onClick={transferSelected}>{busy?'Проводим…':'Переместить в Ангар'}</button>:<button className={`primary large ${quickModeColor}`} disabled={busy} onClick={submitEntry}>{busy?'Сохраняем…':entryMode==='PURCHASE'?'Записать закупку':entryMode==='SALE'?'Продать':'Провести отгрузку'}</button>}<button className="ghost-btn" onClick={clearEntry}>Очистить ввод</button></aside>
@@ -583,7 +601,8 @@ export default function PointApp(){
         <div className="print-sheet"><h2>Учёт склада · Точка</h2><pre>{buildDayText()}</pre></div>
       </>}
 
-      {tab==='days'&&<section className="point-book"><div className="book-title"><div><div className="eyebrow">КОНТРОЛЬ</div><h2>Обзор дней</h2><span>Последние 30 дней. Нажмите на день, чтобы открыть его. Красным отмечены дни с операциями, которые не закрыты.</span></div><div className={`evening-badge`}>{staleDays.length?`не закрыто: ${staleDays.length}`:'всё закрыто'}</div></div><div className="days-list">{days.map((d:DayRow)=>{const empty=d.status===null&&d.ops===0&&d.expenses===0;const stale=d.date<today()&&d.status!=='CLOSED'&&!empty;const label=d.status==='CLOSED'?'Закрыт':d.status==='CHECKED'?'Проверен, не закрыт':d.status==='DRAFT'?'Черновик':empty?'Нет данных':'Не закрыт';return <button className={`day-row ${stale?'stale':''} ${empty?'empty':''} ${d.date===date?'current':''}`} key={d.date} onClick={()=>{setDate(d.date);setTab('work');}}><b>{ruDate(d.date)}</b><span className={`day-chip ${d.status==='CLOSED'?'ok':empty?'muted':'warn'}`}>{label}</span><span>{d.ops>0?`операций: ${d.ops}`:''}{d.ops>0&&d.expenses>0?' · ':''}{d.expenses>0?`расходов: ${d.expenses}`:''}</span><span>{d.variance!=null&&num(d.variance)!==0?<em className="day-var">расхождение {money(d.variance)}</em>:d.status==='CLOSED'?<em className="day-ok">касса сошлась</em>:null}{d.has_comment&&' 💬'}</span></button>})}{!days.length&&<div className="empty-state compact">Загрузка…</div>}</div></section>}
+      {tab==='days'&&<><section className="point-book"><div className="book-title"><div><div className="eyebrow">КОНТРОЛЬ</div><h2>Обзор дней</h2><span>Последние 30 дней. Нажмите на день, чтобы открыть его. Красным отмечены дни с операциями, которые не закрыты.</span></div><div className={`evening-badge`}>{staleDays.length?`не закрыто: ${staleDays.length}`:'всё закрыто'}</div></div><div className="days-list">{days.map((d:DayRow)=>{const empty=d.status===null&&d.ops===0&&d.expenses===0;const stale=d.date<today()&&d.status!=='CLOSED'&&!empty;const label=d.status==='CLOSED'?'Закрыт':d.status==='CHECKED'?'Проверен, не закрыт':d.status==='DRAFT'?'Черновик':empty?'Нет данных':'Не закрыт';return <button className={`day-row ${stale?'stale':''} ${empty?'empty':''} ${d.date===date?'current':''}`} key={d.date} onClick={()=>{setDate(d.date);setTab('work');}}><b>{ruDate(d.date)}</b><span className={`day-chip ${d.status==='CLOSED'?'ok':empty?'muted':'warn'}`}>{label}</span><span>{d.ops>0?`операций: ${d.ops}`:''}{d.ops>0&&d.expenses>0?' · ':''}{d.expenses>0?`расходов: ${d.expenses}`:''}</span><span>{d.variance!=null&&num(d.variance)!==0?<em className="day-var">расхождение {money(d.variance)}</em>:d.status==='CLOSED'?<em className="day-ok">касса сошлась</em>:null}{d.has_comment&&' 💬'}</span></button>})}{!days.length&&<div className="empty-state compact">Загрузка…</div>}</div></section>
+      <section className="point-book"><div className="book-title"><div><div className="eyebrow">ИСТОРИЯ</div><h2>Переоткрытия дня</h2><span>Кто, когда и почему переоткрывал уже закрытый день.</span></div></div>{reopens.length?<div className="reopen-list">{reopens.map((r:ReopenRow)=><div className="reopen-row" key={r.id}><b>{ruDate(r.date)}</b><span>{r.user_name}</span><span className="reopen-reason">{r.reason}</span><small>{new Date(r.created_at).toLocaleString('ru-RU')}</small></div>)}</div>:<div className="empty-state compact">Переоткрытий пока не было.</div>}</section></>}
 
       {tab==='count'&&<>
         <section className="point-book"><div className="book-title"><div><div className="eyebrow">СКЛАД</div><h2>Инвентаризация</h2><span>Взвесили металл — впишите фактический вес. Система сравнит с учётом и сама создаст корректировку: излишек или недостачу. Считаем на текущий момент, день ({date}) должен быть открыт.</span></div></div><div className="count-table"><div className="count-head"><span>Товар</span><span>По учёту, кг</span><span>По факту, кг</span><span>Разница</span></div>{activeProducts.map((p:Product)=>{const st=stockMap.get(p.id);const sys=num(st?.quantity_kg);const raw=countRows[p.id];const has=raw!==undefined&&raw!=='';const diff=has?Math.round((num(raw)-sys)*1000)/1000:0;return <div className="count-row" key={p.id}><b>{p.name}</b><span>{qty(sys)}</span><input type="number" step="0.001" min="0" placeholder="—" value={raw??''} onChange={e=>setCountRows((x:Record<string,string>)=>({...x,[p.id]:e.target.value}))}/><em className={diff>0?'plus':diff<0?'minus':''}>{has?`${diff>0?'+':''}${qty(diff)} кг${diff!==0?` · ${money(Math.round(diff*num(st?.avg_cost)*100)/100)}`:''}`:''}</em></div>})}</div><div className="count-footer"><input placeholder="Причина / комментарий (обязательно), например: плановая инвентаризация" value={countReason} onChange={e=>setCountReason(e.target.value)}/><button className="primary" disabled={busy||!countFilled} onClick={applyStocktake}>Применить инвентаризацию</button></div><small className="muted">Пустые строки не проверяются и не меняются. Изменения делают admin и manager.</small></section>
