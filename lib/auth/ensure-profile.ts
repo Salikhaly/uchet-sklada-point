@@ -12,112 +12,83 @@ function configuredAngarWorkspaceId(): string {
   return String(process.env.SUPABASE_WORKSPACE_ID || '').trim();
 }
 
+// Сверяет каталог Точки с Ангаром пакетно: две выборки списком + один insert
+// недостающих строк, вместо запроса на каждый товар/контрагента по отдельности.
+// Идемпотентно: при повторном вызове ничего лишнего не создаёт.
 async function ensurePointProducts(admin: SupabaseClient, angarWorkspaceId: string, pointWorkspaceId: string) {
-  const { data, error } = await admin
-    .from('products')
-    .select('name,default_price,status,sort_order')
-    .eq('workspace_id', angarWorkspaceId);
-  if (error) throw error;
+  const [angarRes, pointRes] = await Promise.all([
+    admin.from('products').select('name,default_price,status,sort_order').eq('workspace_id', angarWorkspaceId),
+    admin.from('products').select('name').eq('workspace_id', pointWorkspaceId),
+  ]);
+  if (angarRes.error) throw angarRes.error;
+  if (pointRes.error) throw pointRes.error;
 
-  for (const product of data || []) {
-    const { data: existing, error: lookupError } = await admin
-      .from('products')
-      .select('id')
-      .eq('workspace_id', pointWorkspaceId)
-      .ilike('name', product.name)
-      .maybeSingle();
-    if (lookupError) throw lookupError;
-    if (!existing) {
-      const { error: insertError } = await admin.from('products').insert({
-        workspace_id: pointWorkspaceId,
-        name: product.name,
-        default_price: product.default_price,
-        status: product.status,
-        sort_order: product.sort_order ?? 0,
-      });
-      if (insertError) throw insertError;
-    }
+  const existing = new Set((pointRes.data || []).map((p) => p.name.toLowerCase()));
+  const missing = (angarRes.data || [])
+    .filter((p) => !existing.has(p.name.toLowerCase()))
+    .map((p) => ({
+      workspace_id: pointWorkspaceId,
+      name: p.name,
+      default_price: p.default_price,
+      status: p.status,
+      sort_order: p.sort_order ?? 0,
+    }));
+  if (missing.length) {
+    const { error } = await admin.from('products').insert(missing);
+    if (error) throw error;
   }
 }
 
 async function ensurePointContractors(admin: SupabaseClient, angarWorkspaceId: string, pointWorkspaceId: string) {
-  const { data: groups, error: groupsError } = await admin
-    .from('contractor_groups')
-    .select('name')
-    .eq('workspace_id', angarWorkspaceId);
-  if (groupsError) throw groupsError;
+  const [angarGroupsRes, pointGroupsRes] = await Promise.all([
+    admin.from('contractor_groups').select('id,name').eq('workspace_id', angarWorkspaceId),
+    admin.from('contractor_groups').select('id,name').eq('workspace_id', pointWorkspaceId),
+  ]);
+  if (angarGroupsRes.error) throw angarGroupsRes.error;
+  if (pointGroupsRes.error) throw pointGroupsRes.error;
 
-  const groupIdByName = new Map<string, string>();
-  for (const group of groups || []) {
-    const { data: existing, error: lookupError } = await admin
+  const pointGroupIdByName = new Map<string, string>((pointGroupsRes.data || []).map((g) => [g.name.toLowerCase(), g.id]));
+  const missingGroups = (angarGroupsRes.data || []).filter((g) => !pointGroupIdByName.has(g.name.toLowerCase()));
+  if (missingGroups.length) {
+    const { data: created, error } = await admin
       .from('contractor_groups')
-      .select('id')
-      .eq('workspace_id', pointWorkspaceId)
-      .ilike('name', group.name)
-      .maybeSingle();
-    if (lookupError) throw lookupError;
-    if (existing) {
-      groupIdByName.set(group.name.toLowerCase(), existing.id);
-    } else {
-      const { data: created, error: insertError } = await admin
-        .from('contractor_groups')
-        .insert({ workspace_id: pointWorkspaceId, name: group.name })
-        .select('id')
-        .single();
-      if (insertError) throw insertError;
-      groupIdByName.set(group.name.toLowerCase(), created.id);
-    }
+      .insert(missingGroups.map((g) => ({ workspace_id: pointWorkspaceId, name: g.name })))
+      .select('id,name');
+    if (error) throw error;
+    for (const c of created || []) pointGroupIdByName.set(c.name.toLowerCase(), c.id);
   }
+  const angarGroupNameById = new Map<string, string>((angarGroupsRes.data || []).map((g) => [g.id, g.name]));
 
-  const { data: contractors, error: contractorsError } = await admin
-    .from('contractors')
-    .select('name,group_id')
-    .eq('workspace_id', angarWorkspaceId);
-  if (contractorsError) throw contractorsError;
+  const [angarContractorsRes, pointContractorsRes] = await Promise.all([
+    admin.from('contractors').select('name,group_id').eq('workspace_id', angarWorkspaceId),
+    admin.from('contractors').select('name').eq('workspace_id', pointWorkspaceId),
+  ]);
+  if (angarContractorsRes.error) throw angarContractorsRes.error;
+  if (pointContractorsRes.error) throw pointContractorsRes.error;
 
-  for (const contractor of contractors || []) {
-    let pointGroupId: string | null = null;
-    if (contractor.group_id) {
-      const { data: angarGroup, error: groupError } = await admin
-        .from('contractor_groups')
-        .select('name')
-        .eq('id', contractor.group_id)
-        .maybeSingle();
-      if (groupError) throw groupError;
-      pointGroupId = angarGroup ? groupIdByName.get(angarGroup.name.toLowerCase()) || null : null;
-    }
-
-    const { data: existing, error: lookupError } = await admin
-      .from('contractors')
-      .select('id')
-      .eq('workspace_id', pointWorkspaceId)
-      .ilike('name', contractor.name)
-      .maybeSingle();
-    if (lookupError) throw lookupError;
-    if (!existing) {
-      const { error: insertError } = await admin.from('contractors').insert({
-        workspace_id: pointWorkspaceId,
-        name: contractor.name,
-        group_id: pointGroupId,
-      });
-      if (insertError) throw insertError;
-    }
+  const existingNames = new Set((pointContractorsRes.data || []).map((c) => c.name.toLowerCase()));
+  const missingContractors = (angarContractorsRes.data || [])
+    .filter((c) => !existingNames.has(c.name.toLowerCase()))
+    .map((c) => {
+      const angarGroupName = c.group_id ? angarGroupNameById.get(c.group_id) : null;
+      const pointGroupId = angarGroupName ? pointGroupIdByName.get(angarGroupName.toLowerCase()) || null : null;
+      return { workspace_id: pointWorkspaceId, name: c.name, group_id: pointGroupId };
+    });
+  if (missingContractors.length) {
+    const { error } = await admin.from('contractors').insert(missingContractors);
+    if (error) throw error;
   }
 }
 
 async function ensureRetailContractors(admin: SupabaseClient, pointWorkspaceId: string) {
-  for (const name of ['Розничный покупатель', 'Население']) {
-    const { data: existing, error: lookupError } = await admin
-      .from('contractors')
-      .select('id')
-      .eq('workspace_id', pointWorkspaceId)
-      .ilike('name', name)
-      .maybeSingle();
-    if (lookupError) throw lookupError;
-    if (!existing) {
-      const { error: insertError } = await admin.from('contractors').insert({ workspace_id: pointWorkspaceId, name });
-      if (insertError) throw insertError;
-    }
+  const names = ['Розничный покупатель', 'Население'];
+  const { data: existing, error } = await admin.from('contractors').select('name').eq('workspace_id', pointWorkspaceId);
+  if (error) throw error;
+  const have = new Set((existing || []).map((c) => c.name.toLowerCase()));
+  const missing = names.filter((n) => !have.has(n.toLowerCase())).map((n) => ({ workspace_id: pointWorkspaceId, name: n }));
+  if (missing.length) {
+    const { error: insertError } = await admin.from('contractors').insert(missing);
+    if (insertError) throw insertError;
   }
 }
 
@@ -141,12 +112,10 @@ export async function ensureProfileAccess(admin: SupabaseClient, user: User): Pr
     workspaceId = workspace.id;
   }
 
-  let createdPoint = false;
   if (!pointWorkspaceId) {
     const { data: pointWorkspace, error } = await admin.from('workspaces').insert({ name: `Точка ${user.email || user.id}` }).select('id').single();
     if (error) throw error;
     pointWorkspaceId = pointWorkspace.id;
-    createdPoint = true;
   }
 
   const profilePatch = {
@@ -163,10 +132,12 @@ export async function ensureProfileAccess(admin: SupabaseClient, user: User): Pr
     .single();
   if (saveError) throw saveError;
 
-  // Always sync Point dictionaries so an existing-but-empty Point is repaired too.
-  // The operation is idempotent: only missing products/contractors are inserted.
-  await ensurePointProducts(admin, workspaceId, pointWorkspaceId);
-  await ensurePointContractors(admin, workspaceId, pointWorkspaceId);
+  // Сверяем справочники Точки с Ангаром пакетно (см. функции выше) — дозаполняет
+  // недостающие товары/контрагентов, если Точка новая или что-то удалили вручную.
+  await Promise.all([
+    ensurePointProducts(admin, workspaceId, pointWorkspaceId),
+    ensurePointContractors(admin, workspaceId, pointWorkspaceId),
+  ]);
   await ensureRetailContractors(admin, pointWorkspaceId);
 
   return saved;
