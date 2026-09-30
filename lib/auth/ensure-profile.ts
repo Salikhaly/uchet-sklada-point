@@ -17,7 +17,7 @@ function configuredAngarWorkspaceId(): string {
 // Идемпотентно: при повторном вызове ничего лишнего не создаёт.
 async function ensurePointProducts(admin: SupabaseClient, angarWorkspaceId: string, pointWorkspaceId: string) {
   const [angarRes, pointRes] = await Promise.all([
-    admin.from('products').select('name,default_price,status,sort_order').eq('workspace_id', angarWorkspaceId),
+    admin.from('products').select('name,default_price,status,sort_order,category').eq('workspace_id', angarWorkspaceId),
     admin.from('products').select('name').eq('workspace_id', pointWorkspaceId),
   ]);
   if (angarRes.error) throw angarRes.error;
@@ -32,6 +32,7 @@ async function ensurePointProducts(admin: SupabaseClient, angarWorkspaceId: stri
       default_price: p.default_price,
       status: p.status,
       sort_order: p.sort_order ?? 0,
+      category: p.category ?? null,
     }));
   if (missing.length) {
     const { error } = await admin.from('products').insert(missing);
