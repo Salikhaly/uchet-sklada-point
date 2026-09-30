@@ -3,11 +3,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
-type Product = { id:string; name:string; default_price:number; status:string; sort_order?:number };
+type Product = { id:string; name:string; default_price:number; status:string; sort_order?:number; category?:string|null };
+const CATEGORY_ORDER=['Медь','Латунь','Алюминий','Нержавейка','Свинец','Цинк','Чёрный металл','Пластик','Электроника','Смешанное'];
+function groupByCategory<T extends {category?:string|null}>(items:T[]):Array<{category:string;items:T[]}>{
+  const map=new Map<string,T[]>();
+  for(const it of items){const k=(it.category&&it.category.trim())||'Без категории';if(!map.has(k))map.set(k,[]);map.get(k)!.push(it);}
+  const order=[...CATEGORY_ORDER,'Без категории'];
+  const keys=[...map.keys()].sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib);});
+  return keys.map(k=>({category:k,items:map.get(k)!}));
+}
+function slugCat(c:string){return c.toLowerCase().replace(/[^a-zа-яё0-9]+/gi,'-').replace(/^-|-$/g,'')||'none';}
 type Contractor = { id:string; name:string; group_id:string|null; group_name?:string|null };
 type Employee = { id:string; name:string };
 type ExpenseCategory = { id:string; name:string };
-type StockRow = { product_id:string; product_name:string; quantity_kg:number; avg_cost:number; inventory_value:number };
+type StockRow = { product_id:string; product_name:string; category?:string|null; quantity_kg:number; avg_cost:number; inventory_value:number };
 type Group = { id:string; name:string };
 type OperationItem = { product_id:string; product_name:string; kg:number; price:number; sum:number; wasteKg:number; cogs:number };
 type Operation = { id:string; operation_number:number; operation_date:string; type:'ARRIVAL'|'SHIPMENT'; role:string; status:string; contractor_id:string; contractor_name:string; created_at:string; note?:string; items:OperationItem[] };
@@ -36,7 +45,7 @@ type PointReport = {
   totals?: { purchase_kg?:number; purchase_amount?:number; shipment_kg?:number; shipment_amount?:number; sale_kg?:number; sale_amount?:number; transfer_kg?:number; cogs?:number; sale_cogs?:number; expense_amount?:number; loan_given_amount?:number; repayment_amount?:number; brought_cash?:number; opening_cash_first?:number|null; actual_cash_last?:number|null; days_total?:number; days_closed?:number; days_variance?:number };
   employees?: RepEmployee[];
   categories?: RepCategory[];
-  products?: Array<{name:string;stock_kg:number;purchase_kg:number;shipment_kg:number;sale_kg:number;purchase_amount:number;shipment_amount:number;sale_amount:number}>;
+  products?: Array<{name:string;category?:string|null;stock_kg:number;purchase_kg:number;shipment_kg:number;sale_kg:number;purchase_amount:number;shipment_amount:number;sale_amount:number}>;
   days?: RepDay[];
 };
 
@@ -611,7 +620,7 @@ export default function PointApp(){
 
       {tab==='stock'&&<>
         <section className="point-book"><div className="book-title"><div><div className="eyebrow">СКЛАД ТОЧКИ</div><h2>Остатки и товары</h2><span>Просмотр текущего остатка, средней себестоимости и стоимости. Новый товар добавляется прямо сюда.</span></div><div className="evening-badge">{state.products.length} товаров</div></div><div className="stock-admin-grid"><div className="stock-add-card"><div className="notebook-title">Новый товар</div><div className="stock-add-fields"><input placeholder="Название товара" value={newProduct.name} onChange={e=>setNewProduct(x=>({...x,name:e.target.value}))}/><input type="number" min="0" step="0.01" placeholder="Цена по умолчанию ₸/кг" value={newProduct.price} onChange={e=>setNewProduct(x=>({...x,price:e.target.value}))}/><button className="primary" disabled={busy} onClick={addProduct}>＋ Добавить товар</button></div></div><div className="stock-totals-card"><span>Всего металла</span><b>{qty(totalStockKg)} кг</b><small>{money(stockValue)} по себестоимости</small></div></div></section>
-        <section className="point-book"><div className="book-title"><div><h2>Склад по товарам</h2><span>Все активные товары Точки.</span></div></div><div className="compact-stock-grid stock-grid-wide">{[...state.stock].sort((a:StockRow,b:StockRow)=>(productOrder.get(a.product_id)??9999)-(productOrder.get(b.product_id)??9999)).map((s:StockRow)=><div className="compact-stock-card" key={s.product_id}><div><b>{s.product_name}</b><small>Прайс: {money(state.products.find(p=>p.id===s.product_id)?.default_price||0)}/кг</small></div><strong>{qty(s.quantity_kg)} кг</strong><span>{money(s.avg_cost)}/кг · {money(s.inventory_value)}</span></div>)}</div></section>
+        <section className="point-book"><div className="book-title"><div><h2>Склад по товарам</h2><span>Все активные товары Точки, по категориям.</span></div></div>{groupByCategory([...state.stock].sort((a:StockRow,b:StockRow)=>(productOrder.get(a.product_id)??9999)-(productOrder.get(b.product_id)??9999))).map(g=>{const kgSum=g.items.reduce((s2:number,s:StockRow)=>s2+num(s.quantity_kg),0);const valSum=g.items.reduce((s2:number,s:StockRow)=>s2+num(s.inventory_value),0);return <div className="category-block" key={g.category}><div className="category-head"><span className={`category-dot cat-${slugCat(g.category)}`}/><h3>{g.category}</h3><span className="muted">{g.items.length} тов. · {qty(kgSum)} кг · {money(valSum)}</span></div><div className="compact-stock-grid stock-grid-wide">{g.items.map((s:StockRow)=><div className="compact-stock-card" key={s.product_id}><div><b>{s.product_name}</b><small>Прайс: {money(state.products.find(p=>p.id===s.product_id)?.default_price||0)}/кг</small></div><strong>{qty(s.quantity_kg)} кг</strong><span>{money(s.avg_cost)}/кг · {money(s.inventory_value)}</span></div>)}</div></div>})}</section>
       </>}
 
       {tab==='report'&&<section className="report-screen">
@@ -640,7 +649,7 @@ export default function PointApp(){
           <div className="report-rows">{reportCategories.map((c:RepCategory)=><div className="report-row" key={c.category}><div><b>{c.category}</b><small>{c.count} операц.</small></div><strong>{money(c.amount)}</strong></div>)}{!reportCategories.length&&<div className="empty-state compact">Категорий нет.</div>}</div>
         </section>
 
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">4 · СКЛАД</div><h2>По товарам</h2><span>Что покупали, отгружали и сколько осталось, в твоём порядке.</span></div></div><div className="report-product-grid">{orderedReportProducts.map((p)=><div className="report-product-card" key={p.name}><b>{p.name}</b><span>Остаток: {qty(p.stock_kg)} кг</span><span>Приход: {qty(p.purchase_kg)} кг · {money(p.purchase_amount)}</span><span>Отгрузка: {qty(p.shipment_kg)} кг · {money(p.shipment_amount)}</span><span>Продажа: {qty(p.sale_kg)} кг · {money(p.sale_amount)}</span></div>)}</div></section>
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">4 · СКЛАД</div><h2>По товарам</h2><span>Что покупали, отгружали и сколько осталось, по категориям, в твоём порядке.</span></div></div>{groupByCategory(orderedReportProducts).map(g=><div className="category-block" key={g.category}><div className="category-head"><span className={`category-dot cat-${slugCat(g.category)}`}/><h3>{g.category}</h3><span className="muted">{g.items.length} тов.</span></div><div className="report-product-grid">{g.items.map((p)=><div className="report-product-card" key={p.name}><b>{p.name}</b><span>Остаток: {qty(p.stock_kg)} кг</span><span>Приход: {qty(p.purchase_kg)} кг · {money(p.purchase_amount)}</span><span>Отгрузка: {qty(p.shipment_kg)} кг · {money(p.shipment_amount)}</span><span>Продажа: {qty(p.sale_kg)} кг · {money(p.sale_amount)}</span></div>)}</div></div>)}</section>
 
         <section className="point-book"><div className="book-title"><div><div className="eyebrow">5 · ЛИСТ ПО ДНЯМ</div><h2>День за днём</h2><span>Каждая строка — один день. Нажми на день, чтобы открыть его на вкладке «Работа». Жёлтым — расхождение кассы, серым — пустые дни без операций.</span></div></div>
           <div className="days-sheet"><div className="days-sheet-head"><span>День</span><span>Закуп</span><span>Продажа</span><span>Расходы</span><span>Долг</span><span>Внесли</span><span>Касса</span><span>Комментарий</span></div>

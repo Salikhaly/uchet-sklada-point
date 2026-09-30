@@ -416,3 +416,11 @@
 .clear-prices-check{display:inline-flex;align-items:center;gap:7px;font-size:13px;margin:8px 0 4px}.clear-prices-check input{width:auto}
 .reopen-list{display:grid;gap:8px;margin-top:12px}.reopen-row{display:grid;grid-template-columns:110px 130px 1fr auto;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;font-size:13px}.reopen-row small{color:var(--muted);font-size:11px}.reopen-reason{color:#5b574a}
 @media(max-width:760px){.reopen-row{grid-template-columns:1fr 1fr}.reopen-reason{grid-column:1/-1}}
+
+.category-head{display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap}.category-head h3{margin:0;font-size:15px}.category-head .muted{margin-left:auto;font-size:12px}
+.category-dot{display:inline-block;width:11px;height:11px;border-radius:50%;flex:0 0 auto}
+.cat-медь{background:#c96a4a}.cat-латунь{background:#c9a53f}.cat-алюминий{background:#9aa5ad}.cat-нержавейка{background:#7d8b99}.cat-свинец{background:#5c6470}.cat-цинк{background:#7b8f8a}.cat-чёрный-металл{background:#4a4640}.cat-пластик{background:#5b8c3a}.cat-электроника{background:#6a6ad1}.cat-смешанное{background:#b08a5a}.cat-без-категории,.cat-none{background:#c9c6b8}
+.category-panel{margin-bottom:16px}
+.category-block{margin-bottom:18px}
+.category-row td{background:#f4f3ea;font-weight:700;padding:8px 12px!important;display:flex;align-items:center;gap:8px}
+.category-select{border:1px solid var(--border);border-radius:8px;padding:6px 8px;font:inherit;font-size:12px;background:#fff;margin-right:8px}
