@@ -424,3 +424,9 @@
 .category-block{margin-bottom:18px}
 .category-row td{background:#f4f3ea;font-weight:700;padding:8px 12px!important;display:flex;align-items:center;gap:8px}
 .category-select{border:1px solid var(--border);border-radius:8px;padding:6px 8px;font:inherit;font-size:12px;background:#fff;margin-right:8px}
+
+/* Контраст заполненных полей в таблицах приёмки/отгрузки (Ангар и Точка):
+   видно с первого взгляда, где уже есть цифра, а где ещё плейсхолдер. */
+.sheet-row input::placeholder,.point-sheet-row input::placeholder{color:#b9b4a0;font-weight:400;opacity:1}
+.sheet-row input:not(:placeholder-shown),.point-sheet-row input:not(:placeholder-shown){background:#ffffff;border-color:#2d2a21;border-width:1.5px;font-weight:700;color:#1c1a14;box-shadow:inset 3px 0 0 0 #3e7b5d}
+.sheet-row input:not(:placeholder-shown):focus,.point-sheet-row input:not(:placeholder-shown):focus{box-shadow:inset 3px 0 0 0 #3e7b5d,0 0 0 2px rgba(62,123,93,.18)}
