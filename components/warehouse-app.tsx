@@ -339,7 +339,11 @@ function OperationView(p:any){
 function JournalView(p:any){
   const clientOptions=(p.contractors as Contractor[]||[]).slice().sort((a,b)=>a.name.localeCompare(b.name,'ru'));
   const productOptions=(p.products as Product[]||[]).slice().sort((a,b)=>num(a.sort_order)-num(b.sort_order)||a.name.localeCompare(b.name,'ru'));
-  const ordered=(p.ops as Operation[]).slice().sort((a,b)=>a.operation_date<b.operation_date?1:-1);
+  // Порядок строк внутри накладной — тот же, что в Приёмке (sort_order товара), а не порядок ввода.
+  const sortOrderByProductId=new Map<string,number>((p.products as Product[]||[]).map((x:Product)=>[x.id,num(x.sort_order)]));
+  const sortOrderByProductName=new Map<string,number>((p.products as Product[]||[]).map((x:Product)=>[x.name,num(x.sort_order)]));
+  const lineSortOrder=(i:Line)=>sortOrderByProductId.has(i.product_id)?sortOrderByProductId.get(i.product_id)!:(sortOrderByProductName.has(i.product_name)?sortOrderByProductName.get(i.product_name)!:999999);
+  const ordered=(p.ops as Operation[]).slice().sort((a,b)=>a.operation_date<b.operation_date?1:-1).map((o:Operation)=>({...o,items:o.items.slice().sort((a,b)=>lineSortOrder(a)-lineSortOrder(b)||a.product_name.localeCompare(b.product_name,'ru'))}));
   return <section>
     <div className="panel filters">
       <div className="filter-line journal-select-line">
