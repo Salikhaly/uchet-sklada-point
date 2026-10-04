@@ -20,7 +20,17 @@ function ownerId(): number | null {
 
 const admin = () => createAdminClient();
 
-type Session = { step?: string; contractor_id?: string; contractor_name?: string; items?: Array<{ product_id: string; product_name: string; kg: number; price: number }>; pending_product_id?: string; pending_product_name?: string; pending_default_price?: number; pending_kg?: number };
+type CatalogProduct = { id: string; name: string; default_price: number };
+type CatalogContractor = { id: string; name: string };
+type Session = {
+  step?: string; contractor_id?: string; contractor_name?: string;
+  items?: Array<{ product_id: string; product_name: string; kg: number; price: number }>;
+  pending_product_id?: string; pending_product_name?: string; pending_default_price?: number; pending_kg?: number;
+  // Справочник товаров/поставщиков грузится из базы один раз при старте
+  // приёмки и живёт в сессии — дальше выбор товара, кг, цена идут без
+  // единого обращения к базе, пока не нажмут "Завершить".
+  catalog?: { products: CatalogProduct[]; contractors: CatalogContractor[] };
+};
 
 async function getSession(chatId: number): Promise<Session> {
   const { data } = await admin().from('telegram_bot_sessions').select('state').eq('chat_id', chatId).maybeSingle();
@@ -72,13 +82,26 @@ async function requestAccess(telegramUserId: number, username: string | undefine
   ]]);
 }
 
-async function contractorsKeyboard(page: number): Promise<InlineButton[][]> {
+// Справочник грузится из базы ОДИН раз за сессию приёмки (при "Приёмка").
+// Дальше выбор поставщика/товара и "Добавить ещё" работают из него же —
+// без обращений к Supabase, которая физически далеко от сервера.
+async function loadCatalog(): Promise<{ products: CatalogProduct[]; contractors: CatalogContractor[] }> {
+  const ws = workspaceId();
+  const [productsRes, contractorsRes] = await Promise.all([
+    admin().from('products').select('id,name,default_price').eq('workspace_id', ws).eq('status', 'ACTIVE').order('sort_order', { ascending: true }),
+    admin().from('contractors').select('id,name').eq('workspace_id', ws).is('archived_at', null).order('name'),
+  ]);
+  return {
+    products: (productsRes.data || []).map((p: any) => ({ id: p.id, name: p.name, default_price: Number(p.default_price) || 0 })),
+    contractors: (contractorsRes.data || []).map((c: any) => ({ id: c.id, name: c.name })),
+  };
+}
+
+function contractorsKeyboard(contractors: CatalogContractor[], page: number): InlineButton[][] {
   const pageSize = 8;
-  const { data } = await admin().from('contractors').select('id,name').eq('workspace_id', workspaceId()).is('archived_at', null).order('name');
-  const list = data || [];
-  const pages = Math.max(1, Math.ceil(list.length / pageSize));
-  const slice = list.slice(page * pageSize, page * pageSize + pageSize);
-  const rows: InlineButton[][] = slice.map((c: any) => [{ text: c.name, callback_data: `arr:c:${c.id}` }]);
+  const pages = Math.max(1, Math.ceil(contractors.length / pageSize));
+  const slice = contractors.slice(page * pageSize, page * pageSize + pageSize);
+  const rows: InlineButton[][] = slice.map(c => [{ text: c.name, callback_data: `arr:c:${c.id}` }]);
   const nav: InlineButton[] = [];
   if (page > 0) nav.push({ text: '« Назад', callback_data: `arr:cp:${page - 1}` });
   if (page < pages - 1) nav.push({ text: 'Вперёд »', callback_data: `arr:cp:${page + 1}` });
@@ -88,10 +111,9 @@ async function contractorsKeyboard(page: number): Promise<InlineButton[][]> {
   return rows;
 }
 
-async function productsKeyboard(excludeIds: string[]): Promise<InlineButton[][]> {
-  const { data } = await admin().from('products').select('id,name,default_price,sort_order').eq('workspace_id', workspaceId()).eq('status', 'ACTIVE').order('sort_order', { ascending: true });
-  const list = (data || []).filter((p: any) => !excludeIds.includes(p.id));
-  const rows: InlineButton[][] = list.map((p: any) => [{ text: p.name, callback_data: `arr:p:${p.id}` }]);
+function productsKeyboard(products: CatalogProduct[], excludeIds: string[]): InlineButton[][] {
+  const list = products.filter(p => !excludeIds.includes(p.id));
+  const rows: InlineButton[][] = list.map(p => [{ text: p.name, callback_data: `arr:p:${p.id}` }]);
   rows.push([{ text: '✅ Завершить приёмку', callback_data: 'arr:finish' }]);
   rows.push([{ text: '❌ Отмена', callback_data: 'arr:cancel' }]);
   return rows;
@@ -107,7 +129,8 @@ function cartSummary(s: Session): string {
 
 async function showProductStep(chatId: number, s: Session) {
   const excludeIds = (s.items || []).map(i => i.product_id);
-  const kb = await productsKeyboard(excludeIds);
+  const products = s.catalog?.products || [];
+  const kb = productsKeyboard(products, excludeIds);
   await sendMessage(chatId, s.items?.length ? `${cartSummary(s)}\n\nВыбери следующий товар:` : 'Выбери товар:', kb);
 }
 
@@ -170,6 +193,7 @@ async function handleMessage(message: any) {
     const { data, error } = await admin().from('contractors').insert({ workspace_id: workspaceId(), name: text }).select('id,name').single();
     if (error) { await sendMessage(chatId, `Не получилось создать поставщика: ${error.message}`); return; }
     s.contractor_id = data.id; s.contractor_name = data.name; s.step = 'choosing_product'; s.items = s.items || [];
+    if (s.catalog) s.catalog.contractors.push({ id: data.id, name: data.name });
     await setSession(chatId, telegramUserId, s);
     await showProductStep(chatId, s);
     return;
@@ -247,14 +271,16 @@ async function handleCallback(cq: any) {
 
   if (data === 'arr:start') {
     await clearSession(chatId);
-    await setSession(chatId, telegramUserId, { step: 'choosing_contractor', items: [] });
-    await sendMessage(chatId, 'Кто сдал товар?', await contractorsKeyboard(0));
+    const catalog = await loadCatalog();
+    await setSession(chatId, telegramUserId, { step: 'choosing_contractor', items: [], catalog });
+    await sendMessage(chatId, 'Кто сдал товар?', contractorsKeyboard(catalog.contractors, 0));
     return;
   }
 
   if (data.startsWith('arr:cp:')) {
     const page = Number(data.split(':')[2]);
-    await sendMessage(chatId, 'Кто сдал товар?', await contractorsKeyboard(page));
+    const s = await getSession(chatId);
+    await sendMessage(chatId, 'Кто сдал товар?', contractorsKeyboard(s.catalog?.contractors || [], page));
     return;
   }
 
@@ -285,10 +311,10 @@ async function handleCallback(cq: any) {
 
   if (data.startsWith('arr:p:')) {
     const productId = data.slice('arr:p:'.length);
-    const { data: p } = await admin().from('products').select('id,name,default_price').eq('id', productId).single();
-    if (!p) { await sendMessage(chatId, 'Товар не найден.'); return; }
     const s = await getSession(chatId);
-    s.pending_product_id = p.id; s.pending_product_name = p.name; s.pending_default_price = Number(p.default_price) || 0;
+    const p = s.catalog?.products.find(x => x.id === productId);
+    if (!p) { await sendMessage(chatId, 'Товар не найден. Нажми «Приёмка» ещё раз.'); return; }
+    s.pending_product_id = p.id; s.pending_product_name = p.name; s.pending_default_price = p.default_price;
     s.step = 'awaiting_kg';
     await setSession(chatId, telegramUserId, s);
     await sendMessage(chatId, `«${p.name}» — сколько кг приняли?`);
