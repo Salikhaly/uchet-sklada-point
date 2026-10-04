@@ -11,7 +11,7 @@ export async function proxy(request:NextRequest){
   });
   const {data:{user}}=await supabase.auth.getUser();
   const path=request.nextUrl.pathname;
-  if(!user && path!=='/login' && !path.startsWith('/api/auth/')){
+  if(!user && path!=='/login' && !path.startsWith('/api/auth/') && !path.startsWith('/api/telegram/')){
     const url=request.nextUrl.clone(); url.pathname='/login'; url.searchParams.delete('error');
     return NextResponse.redirect(url);
   }
