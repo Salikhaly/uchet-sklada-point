@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendMessage, answerCallbackQuery, type InlineButton } from '@/lib/telegram/client';
+import { redis } from '@/lib/redis';
 
 // Telegram-бот для Ангара: приёмка товара кнопками + отчёт по запросу.
 // Доступ к боту — по списку разрешённых telegram_user_id (telegram_bot_users).
@@ -28,14 +29,32 @@ type Session = {
   pending_product_id?: string; pending_product_name?: string; pending_default_price?: number; pending_kg?: number;
 };
 
+// Черновик накладной живёт в Redis (миллисекунды) — в Supabase бот ходит
+// только при «Завершить». Если Redis не настроен или недоступен, откат на
+// таблицу telegram_bot_sessions, чтобы бот не падал.
+const SESSION_TTL_S = 6 * 60 * 60;
+const sessKey = (chatId: number) => `sess:${chatId}`;
+
 async function getSession(chatId: number): Promise<Session> {
+  if (redis) {
+    try { return (await redis.get<Session>(sessKey(chatId))) || {}; }
+    catch (e) { console.error('REDIS_GET_SESSION', e); }
+  }
   const { data } = await admin().from('telegram_bot_sessions').select('state').eq('chat_id', chatId).maybeSingle();
   return (data?.state as Session) || {};
 }
 async function setSession(chatId: number, telegramUserId: number, state: Session) {
+  if (redis) {
+    try { await redis.set(sessKey(chatId), state, { ex: SESSION_TTL_S }); return; }
+    catch (e) { console.error('REDIS_SET_SESSION', e); }
+  }
   await admin().from('telegram_bot_sessions').upsert({ chat_id: chatId, telegram_user_id: telegramUserId, state, updated_at: new Date().toISOString() });
 }
 async function clearSession(chatId: number) {
+  if (redis) {
+    try { await redis.del(sessKey(chatId)); }
+    catch (e) { console.error('REDIS_DEL_SESSION', e); }
+  }
   await admin().from('telegram_bot_sessions').delete().eq('chat_id', chatId);
 }
 
@@ -46,8 +65,16 @@ const allowCache = new Map<number, number>();
 async function isAllowed(telegramUserId: number): Promise<boolean> {
   const exp = allowCache.get(telegramUserId);
   if (exp && exp > Date.now()) return true;
+  if (redis) {
+    try {
+      if (await redis.get(`allow:${telegramUserId}`)) { allowCache.set(telegramUserId, Date.now() + ALLOW_TTL_MS); return true; }
+    } catch (e) { console.error('REDIS_GET_ALLOW', e); }
+  }
   const { data } = await admin().from('telegram_bot_users').select('allowed').eq('telegram_user_id', telegramUserId).maybeSingle();
-  if (data?.allowed) allowCache.set(telegramUserId, Date.now() + ALLOW_TTL_MS);
+  if (data?.allowed) {
+    allowCache.set(telegramUserId, Date.now() + ALLOW_TTL_MS);
+    if (redis) { try { await redis.set(`allow:${telegramUserId}`, 1, { ex: ALLOW_TTL_MS / 1000 }); } catch (e) { console.error('REDIS_SET_ALLOW', e); } }
+  }
   return !!data?.allowed;
 }
 async function isOwner(telegramUserId: number): Promise<boolean> {
@@ -102,11 +129,23 @@ async function loadCatalog(): Promise<Catalog> {
     contractors: (contractorsRes.data || []).map((c: any) => ({ id: c.id, name: c.name })),
   };
 }
+const CATALOG_KEY = 'catalog:v1';
 async function getCatalog(): Promise<Catalog> {
   if (catalogCache && Date.now() - catalogCache.at < CATALOG_TTL_MS) return catalogCache.data;
+  if (redis) {
+    try {
+      const cached = await redis.get<Catalog>(CATALOG_KEY);
+      if (cached) { catalogCache = { at: Date.now(), data: cached }; return cached; }
+    } catch (e) { console.error('REDIS_GET_CATALOG', e); }
+  }
   const data = await loadCatalog();
   catalogCache = { at: Date.now(), data };
+  if (redis) { try { await redis.set(CATALOG_KEY, data, { ex: CATALOG_TTL_MS / 1000 }); } catch (e) { console.error('REDIS_SET_CATALOG', e); } }
   return data;
+}
+async function invalidateCatalog() {
+  catalogCache = null;
+  if (redis) { try { await redis.del(CATALOG_KEY); } catch (e) { console.error('REDIS_DEL_CATALOG', e); } }
 }
 
 function contractorsKeyboard(contractors: CatalogContractor[], page: number): InlineButton[][] {
@@ -205,7 +244,7 @@ async function handleMessage(message: any) {
     const { data, error } = await admin().from('contractors').insert({ workspace_id: workspaceId(), name: text }).select('id,name').single();
     if (error) { await sendMessage(chatId, `Не получилось создать поставщика: ${error.message}`); return; }
     s.contractor_id = data.id; s.contractor_name = data.name; s.step = 'choosing_product'; s.items = s.items || [];
-    catalogCache = null; // список поставщиков изменился
+    await invalidateCatalog(); // список поставщиков изменился
     await Promise.all([setSession(chatId, telegramUserId, s), showProductStep(chatId, s)]);
     return;
   }
@@ -331,7 +370,7 @@ async function handleCallback(cq: any) {
   if (data.startsWith('arr:p:')) {
     const productId = data.slice('arr:p:'.length);
     let p = (await getCatalog()).products.find(x => x.id === productId);
-    if (!p) { catalogCache = null; p = (await getCatalog()).products.find(x => x.id === productId); }
+    if (!p) { await invalidateCatalog(); p = (await getCatalog()).products.find(x => x.id === productId); }
     if (!p) { await sendMessage(chatId, 'Товар не найден. Нажми «Приёмка» ещё раз.'); return; }
     s.pending_product_id = p.id; s.pending_product_name = p.name; s.pending_default_price = p.default_price;
     s.step = 'awaiting_kg';
