@@ -151,13 +151,17 @@ async function handleMessage(message: any) {
     return;
   }
 
+  // /отчет сразу идёт в sendReport — там RPC сама проверяет allowlist внутри
+  // базы, без отдельного похода в Supabase за проверкой (экономит один
+  // сетевой круг до базы, которая географически далеко от сервера).
+  if (text === '/отчет' || text === '/report') { await sendReport(chatId, telegramUserId); return; }
+
   if (!(await isAllowed(telegramUserId))) {
     await sendMessage(chatId, '⛔ Доступ запрещён. Напиши /start, чтобы отправить заявку владельцу.');
     return;
   }
 
   if (text === '/menu') { await sendMessage(chatId, 'Главное меню:', mainMenu); return; }
-  if (text === '/отчет' || text === '/report') { await sendReport(chatId, telegramUserId); return; }
 
   const s = await getSession(chatId);
 
@@ -205,7 +209,11 @@ function finalizeItem(s: Session, price: number) {
 
 async function sendReport(chatId: number, telegramUserId: number) {
   const { data, error } = await admin().rpc('telegram_today_summary', { p_workspace_id: workspaceId(), p_telegram_user_id: telegramUserId });
-  if (error) { await sendMessage(chatId, `Не получилось получить отчёт: ${error.message}`); return; }
+  if (error) {
+    const denied = /Доступ запрещён/i.test(error.message);
+    await sendMessage(chatId, denied ? '⛔ Доступ запрещён. Напиши /start, чтобы отправить заявку владельцу.' : `Не получилось получить отчёт: ${error.message}`);
+    return;
+  }
   const r = data as any;
   const byProduct = (r.arrivals_by_product || []) as Array<{ name: string; kg: number; sum: number }>;
   const lines = byProduct.length ? byProduct.map(p => `• ${p.name}: ${qty(p.kg)} — ${money(p.sum)}`).join('\n') : 'Пока ничего не приняли.';
@@ -217,7 +225,9 @@ async function handleCallback(cq: any) {
   const chatId = cq.message.chat.id as number;
   const telegramUserId = cq.from.id as number;
   const data = String(cq.data || '');
-  await answerCallbackQuery(cq.id);
+  // Не ждём подтверждение нажатия кнопки — это только убирает "часики" на
+  // кнопке у пользователя, реальный ответ не должен из-за этого тормозить.
+  answerCallbackQuery(cq.id).catch(() => {});
 
   if (data.startsWith('appr:') || data.startsWith('rej:')) {
     if (!(await isOwner(telegramUserId))) { await sendMessage(chatId, 'Только владелец может одобрять заявки.'); return; }
@@ -229,6 +239,10 @@ async function handleCallback(cq: any) {
     return;
   }
 
+  // Отчёт — сразу в sendReport, без отдельной проверки allowlist (RPC
+  // проверяет её сама внутри базы, это экономит один сетевой круг).
+  if (data === 'rep:today') { await sendReport(chatId, telegramUserId); return; }
+
   if (!(await isAllowed(telegramUserId))) { await sendMessage(chatId, '⛔ Доступ запрещён. Напиши /start.'); return; }
 
   if (data === 'arr:start') {
@@ -237,8 +251,6 @@ async function handleCallback(cq: any) {
     await sendMessage(chatId, 'Кто сдал товар?', await contractorsKeyboard(0));
     return;
   }
-
-  if (data === 'rep:today') { await sendReport(chatId, telegramUserId); return; }
 
   if (data.startsWith('arr:cp:')) {
     const page = Number(data.split(':')[2]);
