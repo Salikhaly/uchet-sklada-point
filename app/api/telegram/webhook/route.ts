@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendMessage, answerCallbackQuery, type InlineButton } from '@/lib/telegram/client';
 import { redis } from '@/lib/redis';
@@ -178,11 +178,34 @@ function cartSummary(s: Session): string {
   return `${lines.join('\n')}\n\nИтого: <b>${money(total)}</b>`;
 }
 
-async function showProductStep(chatId: number, s: Session) {
+// ── Ответы Telegram прямо в ответе вебхука ─────────────────────────────────
+// Вместо отдельного запроса sendMessage к api.telegram.org обработчик возвращает
+// «команду», а вебхук отдаёт её в теле ответа — Telegram выполняет её сам.
+// Это экономит целый сетевой заход на каждое нажатие. Шаги по кнопкам правят
+// то же сообщение (editMessageText), поэтому чат не засоряется.
+type Reply = Record<string, unknown> | null;
+const keyboard = (buttons?: InlineButton[][]) => ({ inline_keyboard: buttons || [] });
+
+function sendReply(chatId: number, text: string, buttons?: InlineButton[][]): Reply {
+  return { method: 'sendMessage', chat_id: chatId, text, parse_mode: 'HTML', reply_markup: buttons ? keyboard(buttons) : undefined };
+}
+function editReply(chatId: number, messageId: number | undefined, text: string, buttons?: InlineButton[][]): Reply {
+  if (!messageId) return sendReply(chatId, text, buttons);
+  return { method: 'editMessageText', chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML', reply_markup: keyboard(buttons) };
+}
+
+const cartButtons: InlineButton[][] = [
+  [{ text: '➕ Добавить ещё товар', callback_data: 'arr:more' }],
+  [{ text: '✅ Завершить приёмку', callback_data: 'arr:finish' }],
+  [{ text: '❌ Отмена', callback_data: 'arr:cancel' }],
+];
+const cartReply = (chatId: number, s: Session, messageId?: number) => editReply(chatId, messageId, cartSummary(s), cartButtons);
+
+async function productStep(chatId: number, s: Session, messageId?: number): Promise<Reply> {
   const excludeIds = (s.items || []).map(i => i.product_id);
   const { products } = await getCatalog();
-  const kb = productsKeyboard(products, excludeIds);
-  await sendMessage(chatId, s.items?.length ? `${cartSummary(s)}\n\nВыбери следующий товар:` : 'Выбери товар:', kb);
+  const text = s.items?.length ? `${cartSummary(s)}\n\nВыбери следующий товар:` : 'Выбери товар:';
+  return editReply(chatId, messageId, text, productsKeyboard(products, excludeIds));
 }
 
 export async function POST(req: Request) {
@@ -193,21 +216,25 @@ export async function POST(req: Request) {
   const update = await req.json().catch(() => null);
   if (!update) return NextResponse.json({ ok: true });
 
+  let reply: Reply = null;
   try {
     if (update.callback_query) {
-      await handleCallback(update.callback_query);
+      // «Часики» на кнопке убираем уже ПОСЛЕ ответа вебхука — шаг их не ждёт.
+      const cqId = String(update.callback_query.id);
+      after(() => answerCallbackQuery(cqId).catch(() => {}));
+      reply = await handleCallback(update.callback_query);
     } else if (update.message) {
-      await handleMessage(update.message);
+      reply = await handleMessage(update.message);
     }
   } catch (e: any) {
     console.error('TELEGRAM_WEBHOOK_ERROR', e);
     const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
-    if (chatId) await sendMessage(chatId, `⚠️ Ошибка: ${e?.message || 'что-то пошло не так'}`);
+    if (chatId) reply = sendReply(chatId, `⚠️ Ошибка: ${e?.message || 'что-то пошло не так'}`);
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(reply ?? { ok: true });
 }
 
-async function handleMessage(message: any) {
+async function handleMessage(message: any): Promise<Reply> {
   const chatId = message.chat.id as number;
   const from = message.from;
   const telegramUserId = from.id as number;
@@ -217,67 +244,49 @@ async function handleMessage(message: any) {
   if (text === '/start') {
     await ensureRegistered(telegramUserId, from.username, displayName);
     if (await isAllowed(telegramUserId)) {
-      await sendMessage(chatId, `Привет, ${displayName}! Это бот Ангара — приёмка товара и отчёт за день.`, mainMenu);
-    } else {
-      await requestAccess(telegramUserId, from.username, displayName);
-      await sendMessage(chatId, 'Заявка на доступ отправлена владельцу. Как только подтвердят — напиши /start ещё раз.');
+      return sendReply(chatId, `Привет, ${displayName}! Это бот Ангара — приёмка товара и отчёт за день.`, mainMenu);
     }
-    return;
+    await requestAccess(telegramUserId, from.username, displayName);
+    return sendReply(chatId, 'Заявка на доступ отправлена владельцу. Как только подтвердят — напиши /start ещё раз.');
   }
 
-  // /отчет сразу идёт в sendReport — там RPC сама проверяет allowlist внутри
-  // базы, без отдельного похода в Supabase за проверкой (экономит один
-  // сетевой круг до базы, которая географически далеко от сервера).
-  if (text === '/отчет' || text === '/report') { await sendReport(chatId, telegramUserId); return; }
+  // /отчет сразу идёт в sendReport — RPC сама проверяет allowlist внутри базы.
+  if (text === '/отчет' || text === '/report') return sendReport(chatId, telegramUserId);
 
-  // Проверка доступа и чтение сессии — параллельно, а не друг за другом.
+  // Проверка доступа и чтение сессии — параллельно.
   const [allowed, s] = await Promise.all([isAllowed(telegramUserId), getSession(chatId)]);
-  if (!allowed) {
-    await sendMessage(chatId, '⛔ Доступ запрещён. Напиши /start, чтобы отправить заявку владельцу.');
-    return;
-  }
+  if (!allowed) return sendReply(chatId, '⛔ Доступ запрещён. Напиши /start, чтобы отправить заявку владельцу.');
 
-  if (text === '/menu') { await sendMessage(chatId, 'Главное меню:', mainMenu); return; }
+  if (text === '/menu') return sendReply(chatId, 'Главное меню:', mainMenu);
 
   if (s.step === 'awaiting_contractor_name') {
-    if (!text) { await sendMessage(chatId, 'Напиши название поставщика текстом.'); return; }
+    if (!text) return sendReply(chatId, 'Напиши название поставщика текстом.');
     const { data, error } = await admin().from('contractors').insert({ workspace_id: workspaceId(), name: text }).select('id,name').single();
-    if (error) { await sendMessage(chatId, `Не получилось создать поставщика: ${error.message}`); return; }
+    if (error) return sendReply(chatId, `Не получилось создать поставщика: ${error.message}`);
     s.contractor_id = data.id; s.contractor_name = data.name; s.step = 'choosing_product'; s.items = s.items || [];
     await invalidateCatalog(); // список поставщиков изменился
-    await Promise.all([setSession(chatId, telegramUserId, s), showProductStep(chatId, s)]);
-    return;
+    const [, reply] = await Promise.all([setSession(chatId, telegramUserId, s), productStep(chatId, s)]);
+    return reply;
   }
 
   if (s.step === 'awaiting_kg') {
     const n = parseNum(text);
-    if (n === null || n <= 0) { await sendMessage(chatId, 'Нужно число больше 0. Сколько кг приняли?'); return; }
+    if (n === null || n <= 0) return sendReply(chatId, 'Нужно число больше 0. Сколько кг приняли?');
     s.pending_kg = n; s.step = 'awaiting_price';
+    await setSession(chatId, telegramUserId, s);
     const def = s.pending_default_price ?? 0;
-    await Promise.all([
-      setSession(chatId, telegramUserId, s),
-      sendMessage(chatId, `Цена за кг для «${s.pending_product_name}»? (по умолчанию ${money(def)})`, [[{ text: `Использовать ${money(def)}`, callback_data: 'arr:defprice' }]]),
-    ]);
-    return;
+    return sendReply(chatId, `Цена за кг для «${s.pending_product_name}»? (по умолчанию ${money(def)})`, [[{ text: `Использовать ${money(def)}`, callback_data: 'arr:defprice' }]]);
   }
 
   if (s.step === 'awaiting_price') {
     const n = parseNum(text);
-    if (n === null || n < 0) { await sendMessage(chatId, 'Нужно число цены за кг (0 или больше).'); return; }
+    if (n === null || n < 0) return sendReply(chatId, 'Нужно число цены за кг (0 или больше).');
     finalizeItem(s, n);
-    await Promise.all([setSession(chatId, telegramUserId, s), sendCart(chatId, s)]);
-    return;
+    await setSession(chatId, telegramUserId, s);
+    return cartReply(chatId, s);
   }
 
-  await sendMessage(chatId, 'Не понял. Открой меню:', mainMenu);
-}
-
-function sendCart(chatId: number, s: Session) {
-  return sendMessage(chatId, cartSummary(s), [
-    [{ text: '➕ Добавить ещё товар', callback_data: 'arr:more' }],
-    [{ text: '✅ Завершить приёмку', callback_data: 'arr:finish' }],
-    [{ text: '❌ Отмена', callback_data: 'arr:cancel' }],
-  ]);
+  return sendReply(chatId, 'Не понял. Открой меню:', mainMenu);
 }
 
 function finalizeItem(s: Session, price: number) {
@@ -286,41 +295,37 @@ function finalizeItem(s: Session, price: number) {
   s.step = 'cart'; s.pending_product_id = undefined; s.pending_product_name = undefined; s.pending_default_price = undefined; s.pending_kg = undefined;
 }
 
-async function sendReport(chatId: number, telegramUserId: number) {
+async function sendReport(chatId: number, telegramUserId: number, messageId?: number): Promise<Reply> {
   const { data, error } = await admin().rpc('telegram_today_summary', { p_workspace_id: workspaceId(), p_telegram_user_id: telegramUserId });
   if (error) {
     const denied = /Доступ запрещён/i.test(error.message);
-    await sendMessage(chatId, denied ? '⛔ Доступ запрещён. Напиши /start, чтобы отправить заявку владельцу.' : `Не получилось получить отчёт: ${error.message}`);
-    return;
+    return sendReply(chatId, denied ? '⛔ Доступ запрещён. Напиши /start, чтобы отправить заявку владельцу.' : `Не получилось получить отчёт: ${error.message}`);
   }
   const r = data as any;
   const byProduct = (r.arrivals_by_product || []) as Array<{ name: string; kg: number; sum: number }>;
   const lines = byProduct.length ? byProduct.map(p => `• ${p.name}: ${qty(p.kg)} — ${money(p.sum)}`).join('\n') : 'Пока ничего не приняли.';
   const text = `<b>Отчёт за сегодня (Ангар)</b>\n\n📥 Приход: ${r.arrivals_count} операций на ${money(r.arrivals_total)}\n${lines}\n\n📤 Отгрузка: ${r.shipments_count} операций на ${money(r.shipments_total)}`;
-  await sendMessage(chatId, text, mainMenu);
+  return editReply(chatId, messageId, text, mainMenu);
 }
 
-async function handleCallback(cq: any) {
+async function handleCallback(cq: any): Promise<Reply> {
   const chatId = cq.message.chat.id as number;
+  const messageId = cq.message.message_id as number | undefined;
   const telegramUserId = cq.from.id as number;
   const data = String(cq.data || '');
-  // Не ждём подтверждение нажатия кнопки — это только убирает "часики" на
-  // кнопке у пользователя, реальный ответ не должен из-за этого тормозить.
-  answerCallbackQuery(cq.id).catch(() => {});
 
   if (data.startsWith('appr:') || data.startsWith('rej:')) {
-    if (!(await isOwner(telegramUserId))) { await sendMessage(chatId, 'Только владелец может одобрять заявки.'); return; }
+    if (!(await isOwner(telegramUserId))) return sendReply(chatId, 'Только владелец может одобрять заявки.');
     const targetId = Number(data.split(':')[1]);
     const approve = data.startsWith('appr:');
     await admin().from('telegram_bot_users').update({ allowed: approve, approved_at: new Date().toISOString(), approved_by: telegramUserId }).eq('telegram_user_id', targetId);
-    await sendMessage(chatId, approve ? '✅ Доступ выдан.' : '🚫 Заявка отклонена.');
     await sendMessage(targetId, approve ? 'Твою заявку одобрили! Напиши /start.' : 'Твою заявку отклонили.');
-    return;
+    return editReply(chatId, messageId, approve ? '✅ Доступ выдан.' : '🚫 Заявка отклонена.');
   }
 
   // Отчёт — сразу в sendReport, без отдельной проверки allowlist (RPC
-  // проверяет её сама внутри базы, это экономит один сетевой круг).
-  if (data === 'rep:today') { await sendReport(chatId, telegramUserId); return; }
+  // проверяет её сама внутри базы).
+  if (data === 'rep:today') return sendReport(chatId, telegramUserId, messageId);
 
   // Сессия нужна не на каждом шаге: старт, листание поставщиков, выбор
   // поставщика и отмена её не читают. Остальное читаем параллельно с проверкой доступа.
@@ -329,76 +334,73 @@ async function handleCallback(cq: any) {
     isAllowed(telegramUserId),
     needsSession ? getSession(chatId) : Promise.resolve<Session>({}),
   ]);
-  if (!allowed) { await sendMessage(chatId, '⛔ Доступ запрещён. Напиши /start.'); return; }
+  if (!allowed) return sendReply(chatId, '⛔ Доступ запрещён. Напиши /start.');
 
   if (data === 'arr:start') {
     const [catalog] = await Promise.all([
       getCatalog(),
       setSession(chatId, telegramUserId, { step: 'choosing_contractor', items: [] }),
     ]);
-    await sendMessage(chatId, 'Кто сдал товар?', contractorsKeyboard(catalog.contractors, 0));
-    return;
+    return editReply(chatId, messageId, 'Кто сдал товар?', contractorsKeyboard(catalog.contractors, 0));
   }
 
   if (data.startsWith('arr:cp:')) {
     const page = Number(data.split(':')[2]);
     const catalog = await getCatalog();
-    await sendMessage(chatId, 'Кто сдал товар?', contractorsKeyboard(catalog.contractors, page));
-    return;
+    return editReply(chatId, messageId, 'Кто сдал товар?', contractorsKeyboard(catalog.contractors, page));
   }
 
   if (data === 'arr:newc') {
-    await Promise.all([
-      setSession(chatId, telegramUserId, { step: 'awaiting_contractor_name', items: [] }),
-      sendMessage(chatId, 'Напиши название поставщика:'),
-    ]);
-    return;
+    await setSession(chatId, telegramUserId, { step: 'awaiting_contractor_name', items: [] });
+    return editReply(chatId, messageId, 'Напиши название поставщика:');
   }
 
   if (data.startsWith('arr:c:')) {
     const next: Session = { step: 'choosing_product', items: [], contractor_id: data.slice('arr:c:'.length) };
-    await Promise.all([setSession(chatId, telegramUserId, next), showProductStep(chatId, next)]);
-    return;
+    const [, reply] = await Promise.all([setSession(chatId, telegramUserId, next), productStep(chatId, next, messageId)]);
+    return reply;
   }
 
   if (data === 'arr:more') {
     s.step = 'choosing_product';
-    await Promise.all([setSession(chatId, telegramUserId, s), showProductStep(chatId, s)]);
-    return;
+    const [, reply] = await Promise.all([setSession(chatId, telegramUserId, s), productStep(chatId, s, messageId)]);
+    return reply;
   }
 
   if (data.startsWith('arr:p:')) {
     const productId = data.slice('arr:p:'.length);
     let p = (await getCatalog()).products.find(x => x.id === productId);
     if (!p) { await invalidateCatalog(); p = (await getCatalog()).products.find(x => x.id === productId); }
-    if (!p) { await sendMessage(chatId, 'Товар не найден. Нажми «Приёмка» ещё раз.'); return; }
+    if (!p) return sendReply(chatId, 'Товар не найден. Нажми «Приёмка» ещё раз.');
     s.pending_product_id = p.id; s.pending_product_name = p.name; s.pending_default_price = p.default_price;
     s.step = 'awaiting_kg';
-    await Promise.all([setSession(chatId, telegramUserId, s), sendMessage(chatId, `«${p.name}» — сколько кг приняли?`)]);
-    return;
+    await setSession(chatId, telegramUserId, s);
+    return editReply(chatId, messageId, `«${p.name}» — сколько кг приняли?`, [[{ text: '↩️ Другой товар', callback_data: 'arr:more' }]]);
   }
 
   if (data === 'arr:defprice') {
-    if (s.step !== 'awaiting_price' || !s.pending_product_id) { await sendMessage(chatId, 'Сначала выбери товар.'); return; }
+    if (s.step !== 'awaiting_price' || !s.pending_product_id) return sendReply(chatId, 'Сначала выбери товар.');
     finalizeItem(s, s.pending_default_price ?? 0);
-    await Promise.all([setSession(chatId, telegramUserId, s), sendCart(chatId, s)]);
-    return;
+    await setSession(chatId, telegramUserId, s);
+    return cartReply(chatId, s, messageId);
   }
 
   if (data === 'arr:finish') {
-    if (!s.items?.length || !s.contractor_id) { await sendMessage(chatId, 'Корзина пуста — нечего проводить.'); return; }
+    if (!s.items?.length || !s.contractor_id) return sendReply(chatId, 'Корзина пуста — нечего проводить.');
     const { data: result, error } = await admin().rpc('telegram_post_arrival', {
       p_workspace_id: workspaceId(), p_telegram_user_id: telegramUserId, p_contractor_id: s.contractor_id,
       p_items: s.items.map(i => ({ product_id: i.product_id, kg: i.kg, price: i.price })),
     });
-    if (error) { await sendMessage(chatId, `⚠️ Не удалось провести приёмку: ${error.message}`); return; }
+    if (error) return sendReply(chatId, `⚠️ Не удалось провести приёмку: ${error.message}`);
     const r = result as any;
-    await Promise.all([clearSession(chatId), sendMessage(chatId, `✅ Приёмка №${r.operation_number} проведена на ${money(r.total)}.`, mainMenu)]);
-    return;
+    await clearSession(chatId);
+    return editReply(chatId, messageId, `✅ Приёмка №${r.operation_number} проведена на ${money(r.total)}.\n\n${cartSummary(s)}`, mainMenu);
   }
 
   if (data === 'arr:cancel') {
-    await Promise.all([clearSession(chatId), sendMessage(chatId, 'Отменено.', mainMenu)]);
-    return;
+    await clearSession(chatId);
+    return editReply(chatId, messageId, 'Отменено.', mainMenu);
   }
+
+  return null;
 }
