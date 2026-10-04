@@ -26,10 +26,6 @@ type Session = {
   step?: string; contractor_id?: string; contractor_name?: string;
   items?: Array<{ product_id: string; product_name: string; kg: number; price: number }>;
   pending_product_id?: string; pending_product_name?: string; pending_default_price?: number; pending_kg?: number;
-  // Справочник товаров/поставщиков грузится из базы один раз при старте
-  // приёмки и живёт в сессии — дальше выбор товара, кг, цена идут без
-  // единого обращения к базе, пока не нажмут "Завершить".
-  catalog?: { products: CatalogProduct[]; contractors: CatalogContractor[] };
 };
 
 async function getSession(chatId: number): Promise<Session> {
@@ -43,8 +39,15 @@ async function clearSession(chatId: number) {
   await admin().from('telegram_bot_sessions').delete().eq('chat_id', chatId);
 }
 
+// Кэш разрешений живёт в памяти «тёплой» функции. Кэшируем только «да»:
+// новая заявка одобряется сразу, а отзыв доступа действует максимум через минуту.
+const ALLOW_TTL_MS = 60_000;
+const allowCache = new Map<number, number>();
 async function isAllowed(telegramUserId: number): Promise<boolean> {
+  const exp = allowCache.get(telegramUserId);
+  if (exp && exp > Date.now()) return true;
   const { data } = await admin().from('telegram_bot_users').select('allowed').eq('telegram_user_id', telegramUserId).maybeSingle();
+  if (data?.allowed) allowCache.set(telegramUserId, Date.now() + ALLOW_TTL_MS);
   return !!data?.allowed;
 }
 async function isOwner(telegramUserId: number): Promise<boolean> {
@@ -82,10 +85,13 @@ async function requestAccess(telegramUserId: number, username: string | undefine
   ]]);
 }
 
-// Справочник грузится из базы ОДИН раз за сессию приёмки (при "Приёмка").
-// Дальше выбор поставщика/товара и "Добавить ещё" работают из него же —
-// без обращений к Supabase, которая физически далеко от сервера.
-async function loadCatalog(): Promise<{ products: CatalogProduct[]; contractors: CatalogContractor[] }> {
+// Справочник товаров/поставщиков меняется редко, поэтому держим его в памяти
+// функции (не в сессии: иначе он ездит в базу и обратно на каждом шаге).
+type Catalog = { products: CatalogProduct[]; contractors: CatalogContractor[] };
+const CATALOG_TTL_MS = 5 * 60_000;
+let catalogCache: { at: number; data: Catalog } | null = null;
+
+async function loadCatalog(): Promise<Catalog> {
   const ws = workspaceId();
   const [productsRes, contractorsRes] = await Promise.all([
     admin().from('products').select('id,name,default_price').eq('workspace_id', ws).eq('status', 'ACTIVE').order('sort_order', { ascending: true }),
@@ -95,6 +101,12 @@ async function loadCatalog(): Promise<{ products: CatalogProduct[]; contractors:
     products: (productsRes.data || []).map((p: any) => ({ id: p.id, name: p.name, default_price: Number(p.default_price) || 0 })),
     contractors: (contractorsRes.data || []).map((c: any) => ({ id: c.id, name: c.name })),
   };
+}
+async function getCatalog(): Promise<Catalog> {
+  if (catalogCache && Date.now() - catalogCache.at < CATALOG_TTL_MS) return catalogCache.data;
+  const data = await loadCatalog();
+  catalogCache = { at: Date.now(), data };
+  return data;
 }
 
 function contractorsKeyboard(contractors: CatalogContractor[], page: number): InlineButton[][] {
@@ -129,7 +141,7 @@ function cartSummary(s: Session): string {
 
 async function showProductStep(chatId: number, s: Session) {
   const excludeIds = (s.items || []).map(i => i.product_id);
-  const products = s.catalog?.products || [];
+  const { products } = await getCatalog();
   const kb = productsKeyboard(products, excludeIds);
   await sendMessage(chatId, s.items?.length ? `${cartSummary(s)}\n\nВыбери следующий товар:` : 'Выбери товар:', kb);
 }
@@ -179,23 +191,22 @@ async function handleMessage(message: any) {
   // сетевой круг до базы, которая географически далеко от сервера).
   if (text === '/отчет' || text === '/report') { await sendReport(chatId, telegramUserId); return; }
 
-  if (!(await isAllowed(telegramUserId))) {
+  // Проверка доступа и чтение сессии — параллельно, а не друг за другом.
+  const [allowed, s] = await Promise.all([isAllowed(telegramUserId), getSession(chatId)]);
+  if (!allowed) {
     await sendMessage(chatId, '⛔ Доступ запрещён. Напиши /start, чтобы отправить заявку владельцу.');
     return;
   }
 
   if (text === '/menu') { await sendMessage(chatId, 'Главное меню:', mainMenu); return; }
 
-  const s = await getSession(chatId);
-
   if (s.step === 'awaiting_contractor_name') {
     if (!text) { await sendMessage(chatId, 'Напиши название поставщика текстом.'); return; }
     const { data, error } = await admin().from('contractors').insert({ workspace_id: workspaceId(), name: text }).select('id,name').single();
     if (error) { await sendMessage(chatId, `Не получилось создать поставщика: ${error.message}`); return; }
     s.contractor_id = data.id; s.contractor_name = data.name; s.step = 'choosing_product'; s.items = s.items || [];
-    if (s.catalog) s.catalog.contractors.push({ id: data.id, name: data.name });
-    await setSession(chatId, telegramUserId, s);
-    await showProductStep(chatId, s);
+    catalogCache = null; // список поставщиков изменился
+    await Promise.all([setSession(chatId, telegramUserId, s), showProductStep(chatId, s)]);
     return;
   }
 
@@ -203,9 +214,11 @@ async function handleMessage(message: any) {
     const n = parseNum(text);
     if (n === null || n <= 0) { await sendMessage(chatId, 'Нужно число больше 0. Сколько кг приняли?'); return; }
     s.pending_kg = n; s.step = 'awaiting_price';
-    await setSession(chatId, telegramUserId, s);
     const def = s.pending_default_price ?? 0;
-    await sendMessage(chatId, `Цена за кг для «${s.pending_product_name}»? (по умолчанию ${money(def)})`, [[{ text: `Использовать ${money(def)}`, callback_data: 'arr:defprice' }]]);
+    await Promise.all([
+      setSession(chatId, telegramUserId, s),
+      sendMessage(chatId, `Цена за кг для «${s.pending_product_name}»? (по умолчанию ${money(def)})`, [[{ text: `Использовать ${money(def)}`, callback_data: 'arr:defprice' }]]),
+    ]);
     return;
   }
 
@@ -213,16 +226,19 @@ async function handleMessage(message: any) {
     const n = parseNum(text);
     if (n === null || n < 0) { await sendMessage(chatId, 'Нужно число цены за кг (0 или больше).'); return; }
     finalizeItem(s, n);
-    await setSession(chatId, telegramUserId, s);
-    await sendMessage(chatId, cartSummary(s), [
-      [{ text: '➕ Добавить ещё товар', callback_data: 'arr:more' }],
-      [{ text: '✅ Завершить приёмку', callback_data: 'arr:finish' }],
-      [{ text: '❌ Отмена', callback_data: 'arr:cancel' }],
-    ]);
+    await Promise.all([setSession(chatId, telegramUserId, s), sendCart(chatId, s)]);
     return;
   }
 
   await sendMessage(chatId, 'Не понял. Открой меню:', mainMenu);
+}
+
+function sendCart(chatId: number, s: Session) {
+  return sendMessage(chatId, cartSummary(s), [
+    [{ text: '➕ Добавить ещё товар', callback_data: 'arr:more' }],
+    [{ text: '✅ Завершить приёмку', callback_data: 'arr:finish' }],
+    [{ text: '❌ Отмена', callback_data: 'arr:cancel' }],
+  ]);
 }
 
 function finalizeItem(s: Session, price: number) {
@@ -267,75 +283,70 @@ async function handleCallback(cq: any) {
   // проверяет её сама внутри базы, это экономит один сетевой круг).
   if (data === 'rep:today') { await sendReport(chatId, telegramUserId); return; }
 
-  if (!(await isAllowed(telegramUserId))) { await sendMessage(chatId, '⛔ Доступ запрещён. Напиши /start.'); return; }
+  // Сессия нужна не на каждом шаге: старт, листание поставщиков, выбор
+  // поставщика и отмена её не читают. Остальное читаем параллельно с проверкой доступа.
+  const needsSession = !(data === 'arr:start' || data.startsWith('arr:cp:') || data === 'arr:newc' || data.startsWith('arr:c:') || data === 'arr:cancel');
+  const [allowed, s] = await Promise.all([
+    isAllowed(telegramUserId),
+    needsSession ? getSession(chatId) : Promise.resolve<Session>({}),
+  ]);
+  if (!allowed) { await sendMessage(chatId, '⛔ Доступ запрещён. Напиши /start.'); return; }
 
   if (data === 'arr:start') {
-    await clearSession(chatId);
-    const catalog = await loadCatalog();
-    await setSession(chatId, telegramUserId, { step: 'choosing_contractor', items: [], catalog });
+    const [catalog] = await Promise.all([
+      getCatalog(),
+      setSession(chatId, telegramUserId, { step: 'choosing_contractor', items: [] }),
+    ]);
     await sendMessage(chatId, 'Кто сдал товар?', contractorsKeyboard(catalog.contractors, 0));
     return;
   }
 
   if (data.startsWith('arr:cp:')) {
     const page = Number(data.split(':')[2]);
-    const s = await getSession(chatId);
-    await sendMessage(chatId, 'Кто сдал товар?', contractorsKeyboard(s.catalog?.contractors || [], page));
+    const catalog = await getCatalog();
+    await sendMessage(chatId, 'Кто сдал товар?', contractorsKeyboard(catalog.contractors, page));
     return;
   }
 
   if (data === 'arr:newc') {
-    const s = await getSession(chatId);
-    s.step = 'awaiting_contractor_name';
-    await setSession(chatId, telegramUserId, s);
-    await sendMessage(chatId, 'Напиши название поставщика:');
+    await Promise.all([
+      setSession(chatId, telegramUserId, { step: 'awaiting_contractor_name', items: [] }),
+      sendMessage(chatId, 'Напиши название поставщика:'),
+    ]);
     return;
   }
 
   if (data.startsWith('arr:c:')) {
-    const contractorId = data.slice('arr:c:'.length);
-    const s = await getSession(chatId);
-    s.contractor_id = contractorId; s.step = 'choosing_product'; s.items = s.items || [];
-    await setSession(chatId, telegramUserId, s);
-    await showProductStep(chatId, s);
+    const next: Session = { step: 'choosing_product', items: [], contractor_id: data.slice('arr:c:'.length) };
+    await Promise.all([setSession(chatId, telegramUserId, next), showProductStep(chatId, next)]);
     return;
   }
 
   if (data === 'arr:more') {
-    const s = await getSession(chatId);
     s.step = 'choosing_product';
-    await setSession(chatId, telegramUserId, s);
-    await showProductStep(chatId, s);
+    await Promise.all([setSession(chatId, telegramUserId, s), showProductStep(chatId, s)]);
     return;
   }
 
   if (data.startsWith('arr:p:')) {
     const productId = data.slice('arr:p:'.length);
-    const s = await getSession(chatId);
-    const p = s.catalog?.products.find(x => x.id === productId);
+    let p = (await getCatalog()).products.find(x => x.id === productId);
+    if (!p) { catalogCache = null; p = (await getCatalog()).products.find(x => x.id === productId); }
     if (!p) { await sendMessage(chatId, 'Товар не найден. Нажми «Приёмка» ещё раз.'); return; }
     s.pending_product_id = p.id; s.pending_product_name = p.name; s.pending_default_price = p.default_price;
     s.step = 'awaiting_kg';
-    await setSession(chatId, telegramUserId, s);
-    await sendMessage(chatId, `«${p.name}» — сколько кг приняли?`);
+    await Promise.all([setSession(chatId, telegramUserId, s), sendMessage(chatId, `«${p.name}» — сколько кг приняли?`)]);
     return;
   }
 
   if (data === 'arr:defprice') {
-    const s = await getSession(chatId);
     if (s.step !== 'awaiting_price' || !s.pending_product_id) { await sendMessage(chatId, 'Сначала выбери товар.'); return; }
     finalizeItem(s, s.pending_default_price ?? 0);
-    await setSession(chatId, telegramUserId, s);
-    await sendMessage(chatId, cartSummary(s), [
-      [{ text: '➕ Добавить ещё товар', callback_data: 'arr:more' }],
-      [{ text: '✅ Завершить приёмку', callback_data: 'arr:finish' }],
-      [{ text: '❌ Отмена', callback_data: 'arr:cancel' }],
-    ]);
+    await Promise.all([setSession(chatId, telegramUserId, s), sendCart(chatId, s)]);
     return;
   }
 
   if (data === 'arr:finish') {
-    const s = await getSession(chatId);
     if (!s.items?.length || !s.contractor_id) { await sendMessage(chatId, 'Корзина пуста — нечего проводить.'); return; }
     const { data: result, error } = await admin().rpc('telegram_post_arrival', {
       p_workspace_id: workspaceId(), p_telegram_user_id: telegramUserId, p_contractor_id: s.contractor_id,
@@ -343,14 +354,12 @@ async function handleCallback(cq: any) {
     });
     if (error) { await sendMessage(chatId, `⚠️ Не удалось провести приёмку: ${error.message}`); return; }
     const r = result as any;
-    await clearSession(chatId);
-    await sendMessage(chatId, `✅ Приёмка №${r.operation_number} проведена на ${money(r.total)}.`, mainMenu);
+    await Promise.all([clearSession(chatId), sendMessage(chatId, `✅ Приёмка №${r.operation_number} проведена на ${money(r.total)}.`, mainMenu)]);
     return;
   }
 
   if (data === 'arr:cancel') {
-    await clearSession(chatId);
-    await sendMessage(chatId, 'Отменено.', mainMenu);
+    await Promise.all([clearSession(chatId), sendMessage(chatId, 'Отменено.', mainMenu)]);
     return;
   }
 }
