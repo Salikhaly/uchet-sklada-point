@@ -208,6 +208,18 @@ async function productStep(chatId: number, s: Session, messageId?: number): Prom
   return editReply(chatId, messageId, text, productsKeyboard(products, excludeIds));
 }
 
+// GET — для прогрева функции (пингуйте раз в 5 минут, чтобы не было холодного
+// старта) и быстрой проверки: какой стор используется и сколько отвечает Redis.
+export const dynamic = 'force-dynamic';
+export async function GET() {
+  let redisMs: number | null = null;
+  if (redis) {
+    const t = Date.now();
+    try { await redis.ping(); redisMs = Date.now() - t; } catch { redisMs = -1; }
+  }
+  return NextResponse.json({ ok: true, store: redis ? 'redis' : 'supabase-fallback', redisMs });
+}
+
 export async function POST(req: Request) {
   const secret = req.headers.get('x-telegram-bot-api-secret-token');
   if (!process.env.TELEGRAM_WEBHOOK_SECRET || secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
