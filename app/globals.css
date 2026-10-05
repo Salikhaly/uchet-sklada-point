@@ -430,3 +430,27 @@
 .sheet-row input::placeholder,.point-sheet-row input::placeholder{color:#b9b4a0;font-weight:400;opacity:1}
 .sheet-row input:not(:placeholder-shown),.point-sheet-row input:not(:placeholder-shown){background:#ffffff;border-color:#2d2a21;border-width:1.5px;font-weight:700;color:#1c1a14;box-shadow:inset 3px 0 0 0 #3e7b5d}
 .sheet-row input:not(:placeholder-shown):focus,.point-sheet-row input:not(:placeholder-shown):focus{box-shadow:inset 3px 0 0 0 #3e7b5d,0 0 0 2px rgba(62,123,93,.18)}
+
+/* ── Точка: блок «Зарплата» ── */
+.pay-screen .pay-grid{display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:14px;margin-top:14px;align-items:start}
+.pay-month{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.pay-month button{border:1px solid var(--border);background:#fff;border-radius:10px;width:40px;height:40px;font-size:20px}
+.pay-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.pay-wd{text-align:center;font-size:11px;color:var(--muted);padding:4px 0}
+.pay-day{position:relative;aspect-ratio:1/1;min-height:40px;border:1px solid #dfe2d5;background:#fff;border-radius:10px;font-weight:600}.pay-day:disabled{opacity:.35}
+.pay-day.today{border-color:var(--accent)}.pay-day.sel{background:#2d2a21;color:#fff;border-color:#2d2a21}
+.pay-day.has::after{content:'';position:absolute;bottom:5px;left:50%;transform:translateX(-50%);width:6px;height:6px;border-radius:50%;background:var(--green)}.pay-day.sel.has::after{background:#9ffa73}
+.pay-sub{margin:14px 0 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.pay-people{display:flex;flex-wrap:wrap;gap:10px}.pay-person{display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:transparent;padding:2px;width:68px}
+.pay-avatar{display:grid;place-items:center;width:46px;height:46px;border-radius:50%;font-weight:800;font-size:18px;border:2px solid transparent;color:#2d2a21}.pay-avatar.sm{width:30px;height:30px;font-size:14px}
+.pay-person small{font-size:11px;line-height:1.1;text-align:center;word-break:break-word}.pay-person.on .pay-avatar{border-color:#2d2a21;box-shadow:0 0 0 3px rgba(45,42,33,.18)}.pay-person.on small{font-weight:800}
+.pay-form{display:flex;flex-direction:column;gap:8px}.pay-form input,.pay-form select{border:1px solid var(--border);background:#fff;border-radius:9px;padding:11px;min-height:44px;width:100%}
+.pay-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.pay-actions button{min-height:46px;font-weight:700}.pay-ghost{border:1px solid var(--border);background:#fff;border-radius:10px;padding:10px 15px}
+.pay-cat{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+.pay-day-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}.pay-day-head>b{text-transform:capitalize}
+.pay-chips{display:flex;gap:8px;flex-wrap:wrap}.pay-chips span{background:#eef0e5;border-radius:999px;padding:6px 10px;font-size:12px}
+.pay-list{display:flex;flex-direction:column;gap:10px}.pay-emp{background:#fff;border:1px solid var(--border);border-radius:14px;padding:10px 12px}
+.pay-emp-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}.pay-emp-head strong{margin-left:auto}
+.pay-entry{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:7px 0;border-top:1px dashed #e2e4d9;font-size:14px}.pay-entry em{color:var(--muted);font-style:normal}
+.pay-entry-actions{display:flex;gap:4px}.pay-entry-actions button{border:1px solid var(--border);background:#f7f8f2;border-radius:8px;min-width:36px;min-height:36px}
+.pay-report{margin-top:14px}.pay-report .report-toolbar{flex-wrap:wrap;margin-bottom:8px}.pay-table-wrap{overflow-x:auto}
+.pay-row{cursor:pointer}.pay-row:hover{background:#f8faf4}.pay-detail td{background:#fafbf6;font-size:13px;color:#4c4a3d}.pay-report tfoot td{background:#eef0e5}
+@media(max-width:900px){.pay-screen .pay-grid{grid-template-columns:1fr}.pay-day{min-height:44px}}

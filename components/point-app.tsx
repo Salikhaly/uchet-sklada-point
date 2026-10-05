@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import PointPayroll from './point-payroll';
 
 type Product = { id:string; name:string; default_price:number; status:string; sort_order?:number; category?:string|null };
 const CATEGORY_ORDER=['Медь','Латунь','Алюминий','Нержавейка','Свинец','Цинк','Чёрный металл','Пластик','Электроника','Смешанное'];
@@ -23,7 +24,7 @@ type Operation = { id:string; operation_number:number; operation_date:string; ty
 type PointState = { products:Product[]; contractors:Contractor[]; groups:Group[]; employees:Employee[]; expenseCategories:ExpenseCategory[]; stock:StockRow[]; operations:Operation[] };
 type EntryMode='PURCHASE'|'SHIPMENT'|'SALE'|'TRANSFER';
 type Line = { kg:string; price:string; sum:string; sumTouched:boolean };
-type EvenTab='work'|'stock'|'count'|'days'|'report';
+type EvenTab='work'|'stock'|'count'|'days'|'payroll'|'report';
 type EveningExpense = { id:string; employee_id?:string|null; employee_name?:string|null; category:string; comment?:string|null; amount:number; is_loan?:boolean; repaid?:number };
 type Repayment = { id:string; amount:number; note?:string|null; employee_name?:string|null; given_date?:string; category?:string };
 type LoanRow = { expense_id:string; given_date:string; employee_name:string; category:string; comment?:string|null; amount:number; repaid:number; remaining:number; status:'UNPAID'|'PARTIAL'|'PAID'; repayments:Array<{id:string;date:string;amount:number;note?:string|null}> };
@@ -578,6 +579,7 @@ export default function PointApp(){
         <button className={tab==='stock'?'active':''} onClick={()=>setTab('stock')}>Склад</button>
         <button className={tab==='count'?'active':''} onClick={()=>setTab('count')}>Инвентаризация</button>
         <button className={tab==='days'?'active':''} onClick={()=>{setTab('days');loadDays();}}>Дни{staleDays.length>0&&<em className="tab-dot">{staleDays.length}</em>}</button>
+        <button className={tab==='payroll'?'active':''} onClick={()=>setTab('payroll')}>Зарплата</button>
         <button className={tab==='report'?'active':''} onClick={()=>{setTab('report');loadReport();}}>Отчёты</button>
       </nav>
 
@@ -623,6 +625,7 @@ export default function PointApp(){
         <section className="point-book"><div className="book-title"><div><h2>Склад по товарам</h2><span>Все активные товары Точки, по категориям.</span></div></div>{groupByCategory([...state.stock].sort((a:StockRow,b:StockRow)=>(productOrder.get(a.product_id)??9999)-(productOrder.get(b.product_id)??9999))).map(g=>{const kgSum=g.items.reduce((s2:number,s:StockRow)=>s2+num(s.quantity_kg),0);const valSum=g.items.reduce((s2:number,s:StockRow)=>s2+num(s.inventory_value),0);return <div className="category-block" key={g.category}><div className="category-head"><span className={`category-dot cat-${slugCat(g.category)}`}/><h3>{g.category}</h3><span className="muted">{g.items.length} тов. · {qty(kgSum)} кг · {money(valSum)}</span></div><div className="compact-stock-grid stock-grid-wide">{g.items.map((s:StockRow)=><div className="compact-stock-card" key={s.product_id}><div><b>{s.product_name}</b><small>Прайс: {money(state.products.find(p=>p.id===s.product_id)?.default_price||0)}/кг</small></div><strong>{qty(s.quantity_kg)} кг</strong><span>{money(s.avg_cost)}/кг · {money(s.inventory_value)}</span></div>)}</div></div>})}</section>
       </>}
 
+      {tab==='payroll'&&<PointPayroll employees={state.employees} categories={state.expenseCategories} notify={notify} onChanged={()=>{loadEvening();loadDays();}}/>}
       {tab==='report'&&<section className="report-screen">
         <div className="point-book"><div className="book-title"><div><div className="eyebrow">ОТЧЁТЫ ТОЧКИ</div><h2>{reportPeriodLabel}</h2><span>Всё за период одним экраном: касса, кто сколько взял, расходы по статьям и лист по дням для проверки.</span></div></div><div className="report-toolbar"><div className="period-chips"><button className={`chip ${reportPeriod==='week'?'on':''}`} onClick={()=>setPeriod('week')}>7 дней</button><button className={`chip ${reportPeriod==='month'?'on':''}`} onClick={()=>setPeriod('month')}>Месяц</button><button className={`chip ${reportPeriod==='custom'?'on':''}`} onClick={()=>setReportPeriod('custom')}>Свой период</button></div><div className="report-dates"><label><span>С</span><input type="date" value={reportFrom} max={reportTo} onChange={e=>{setReportPeriod('custom');setReportFrom(e.target.value)}}/></label><label><span>По</span><input type="date" value={reportTo} min={reportFrom} max={today()} onChange={e=>{setReportPeriod('custom');setReportTo(e.target.value)}}/></label><button className="primary" onClick={loadReport}>Обновить</button><button onClick={exportReportXlsx}>⬇ Excel</button></div></div></div>
 
