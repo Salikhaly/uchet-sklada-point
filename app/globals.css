@@ -468,3 +468,17 @@
 .pay-report{margin-top:14px}.pay-report .report-toolbar{flex-wrap:wrap;margin-bottom:8px}.pay-table-wrap{overflow-x:auto}
 .pay-row{cursor:pointer}.pay-row:hover{background:#f8faf4}.pay-detail td{background:#fafbf6;font-size:13px;color:#4c4a3d}.pay-report tfoot td{background:#eef0e5}
 @media(max-width:900px){.pay-screen .pay-grid{grid-template-columns:1fr}.pay-day{min-height:58px}.pay-inputs{grid-template-columns:1fr}.pay-entry{grid-template-columns:auto 1fr auto}.pay-entry .pay-entry-actions{grid-column:1/-1;justify-content:flex-end}}
+
+/* ── Отчёт Точки: блок «Люди» ── */
+.ppl{margin-top:10px;display:grid;gap:0}
+.ppl-head,.ppl-row{display:grid;grid-template-columns:1.7fr repeat(4,1fr) 1.15fr;gap:10px;align-items:center;padding:9px 10px}
+.ppl-head{font-size:11px;color:var(--muted);text-transform:uppercase}.ppl-head span,.ppl-row span{text-align:right}
+.ppl-row{width:100%;border:0;border-top:1px solid #e4e6dc;background:transparent;font-size:13px;text-align:left;border-radius:0}.ppl-row:hover{background:#f8faf4}.ppl-row.open{background:#f4f6ec}
+.ppl-row.svc{color:var(--muted)}.ppl-names{font-style:normal;font-weight:400;font-size:11px}
+.ppl-row.total{font-weight:700;border-top:2px solid #2d2b23;margin-top:4px;cursor:default}
+.ppl-detail{background:#fafbf6;border-top:1px dashed #dfe2d5;padding:8px 14px 10px 26px;display:grid;gap:5px;font-size:13px}
+.ppl-line{display:grid;grid-template-columns:92px 1fr auto;gap:10px}.ppl-line em{color:var(--muted);font-style:normal}.ppl-break{display:none}
+.ppl-check{margin:8px 4px 0;font-size:12px}.ppl-check.ok{color:var(--green)}.ppl-check.warn{color:var(--red);font-weight:700}
+.ppl-debts{margin-top:16px}.ppl-dhead,.ppl-drow{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:10px;padding:8px 10px;font-size:13px}
+.ppl-dhead{font-size:11px;color:var(--muted);text-transform:uppercase}.ppl-dhead span,.ppl-drow span{text-align:right}.ppl-drow{border-top:1px solid #e4e6dc}.ppl-drow.has-debt{background:#fff6f4}
+@media(max-width:760px){.ppl-head,.ppl-row{grid-template-columns:1fr auto}.ppl-c{display:none}.ppl-break{display:flex;flex-wrap:wrap;gap:6px}.ppl-break span{background:#eef0e5;border-radius:999px;padding:5px 9px;font-size:12px}.ppl-line{grid-template-columns:70px 1fr auto}.ppl-dhead,.ppl-drow{font-size:12px;gap:6px}}

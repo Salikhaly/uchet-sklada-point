@@ -36,6 +36,8 @@ type Stocktake = { id:string; date:string; reason:string; created_at:string; use
 type EditExp = { id:string; employeeId:string; category:string; comment:string; amount:string; isLoan:boolean };
 type ReopenRow = { id:number; date:string; reason:string; user_name:string; created_at:string };
 type RepEmployee={employee_id:string;employee_name:string;expense_amount:number;loan_amount:number;total_amount:number;repaid_in_period:number;debt_remaining:number};
+type PersonItem={date:string;category:string;amount:number;comment?:string|null;is_loan:boolean};
+type PersonRep={employee_id:string|null;name:string;hidden:boolean;advance:number;salary:number;other:number;loan_given:number;total:number;repaid:number;debt_remaining:number;items:PersonItem[]};
 type RepCategory={category:string;amount:number;count:number};
 type RepDay={date:string;status:string|null;purchase_amount:number;shipment_amount:number;sale_amount:number;expense_amount:number;loan_amount:number;repayment_amount:number;opening_cash:number|null;brought_cash:number|null;actual_cash:number|null;expected_cash:number|null;variance:number|null;ops:number;comment?:string|null};
 const loanLabel={UNPAID:'Не погашен',PARTIAL:'Частично погашен',PAID:'Погашен'} as const;
@@ -108,6 +110,8 @@ export default function PointApp(){
   const [reportFrom,setReportFrom]=useState(()=>addDays(today(),-6));
   const [reportTo,setReportTo]=useState(today());
   const [reportPeriod,setReportPeriod]=useState<'week'|'month'|'custom'>('week');
+  const [reportPeople,setReportPeople]=useState<PersonRep[]>([]);
+  const [openPerson,setOpenPerson]=useState<Record<string,boolean>>({});
   const [newProduct,setNewProduct]=useState({name:'',price:''});
   const [collapsed,setCollapsed]=useState<Record<string,boolean>>({stock:false,journal:true,summary:true});
 
@@ -275,9 +279,13 @@ export default function PointApp(){
     ],[24,14,12,14,14,14,12,14]),'Товары');
     XLSX.utils.book_append_sheet(wb,sheet([
       ['Статья расхода','Сумма, ₸','Операций'],...reportCategories.map((c)=>[c.category,num(c.amount),num(c.count)]),
-      [],['Сотрудник','Расходы, ₸','Долг выдан, ₸','Вернул за период, ₸','Осталось должен, ₸'],
-      ...reportEmployees.map((e)=>[e.employee_name||'Без сотрудника',num(e.expense_amount),num(e.loan_amount),num(e.repaid_in_period),num(e.debt_remaining)]),
-    ],[28,16,16,18,18]),'Расходы и люди');
+      [],['Сотрудник','Аванс, ₸','Зарплата, ₸','Расходы, ₸','В долг, ₸','Всего, ₸','Вернул за период, ₸','Осталось должен (на сегодня), ₸'],
+      ...reportPeople.map((x)=>[x.name+(x.hidden?' (служебная)':''),num(x.advance),num(x.salary),num(x.other),num(x.loan_given),num(x.total),num(x.repaid),num(x.debt_remaining)]),
+    ],[28,14,14,14,14,14,18,26]),'Расходы и люди');
+    XLSX.utils.book_append_sheet(wb,sheet([
+      ['Дата','Сотрудник','Статья','Сумма, ₸','В долг','Комментарий'],
+      ...reportPeople.flatMap((x)=>x.items.map((it)=>[String(it.date).slice(0,10),x.name,it.category,num(it.amount),it.is_loan?'да':'',it.comment||''])),
+    ],[12,22,18,14,8,36]),'Люди — записи');
     XLSX.utils.book_append_sheet(wb,sheet([
       ['Дата','Статус','Закуп, ₸','Продажа, ₸','Расходы, ₸','Долг выдан, ₸','Внесли, ₸','Факт. касса, ₸','Расхождение, ₸','Комментарий'],
       ...reportDays.map((d)=>[d.date.slice(0,10),d.status||'—',num(d.purchase_amount),num(d.sale_amount),num(d.expense_amount),num(d.loan_amount),num(d.repayment_amount),d.actual_cash==null?'':num(d.actual_cash),d.variance==null?'':num(d.variance),d.comment||'']),
@@ -321,9 +329,14 @@ export default function PointApp(){
     setDayInfo({report:(r.data??{}) as unknown as PointReport,evening:(e.data??{}) as unknown as EveningData});
   }
   async function loadReport(){
-    const {data,error}=await supabase.rpc('point_get_report',{p_from:reportFrom,p_to:reportTo});
+    const [{data,error},people]=await Promise.all([
+      supabase.rpc('point_get_report',{p_from:reportFrom,p_to:reportTo}),
+      supabase.rpc('point_get_people_report',{p_from:reportFrom,p_to:reportTo}),
+    ]);
     if(error){notify(error.message);return;}
     setReport((data??{}) as PointReport);
+    if(people.error){notify(people.error.message);setReportPeople([]);}
+    else setReportPeople(((people.data??[]) as PersonRep[]).map(x=>({...x,items:x.items||[]})));
   }
 
   useEffect(()=>{load();},[]);
@@ -532,7 +545,16 @@ export default function PointApp(){
   const quickModeLabel=entryMode==='PURCHASE'?'Закуп из тетради':entryMode==='SHIPMENT'?'Отгрузка':entryMode==='SALE'?'Продажа':'Перемещение в Ангар';
   const quickModeColor=entryMode==='PURCHASE'?'in':entryMode==='SHIPMENT'?'out':'neutral';
   const reportTotals=report?.totals||{};
+  const rt0=report?.totals||{};
   const reportEmployees=report?.employees||[];
+  // «Люди»: считаем из отдельного отчёта (строго за период). Скрытые в «Зарплате» (Тест, Дневной расход, Начальство…) — одной служебной строкой, чтобы итог сходился с расходами.
+  const mainPeople=reportPeople.filter(x=>!x.hidden);
+  const servicePeople=reportPeople.filter(x=>x.hidden);
+  const sumP=(list:PersonRep[],k:'advance'|'salary'|'other'|'loan_given'|'total')=>list.reduce((a,x)=>a+num(x[k]),0);
+  const servicePerson:PersonRep|null=servicePeople.length?{employee_id:'service',name:'Служебные записи',hidden:true,advance:sumP(servicePeople,'advance'),salary:sumP(servicePeople,'salary'),other:sumP(servicePeople,'other'),loan_given:sumP(servicePeople,'loan_given'),total:sumP(servicePeople,'total'),repaid:0,debt_remaining:0,items:servicePeople.flatMap(x=>x.items.map(it=>({...it,category:`${x.name}: ${it.category}`}))).sort((a,b)=>a.date.localeCompare(b.date))}:null;
+  const peopleTotal=sumP(reportPeople,'total');
+  const peopleDiff=num(rt0.expense_amount)-peopleTotal;
+  const debtPeople=reportPeople.filter(x=>num(x.loan_given)>0||num(x.repaid)>0||num(x.debt_remaining)>0);
   const reportCategories=report?.categories||[];
   const reportProducts=report?.products||[];
   const reportDays=report?.days||[];
@@ -641,11 +663,27 @@ export default function PointApp(){
 
         <div className="stat-cards report-kpis"><div><small>Закуплено</small><b>{qty(reportTotals.purchase_kg)} кг</b><span>{money(reportTotals.purchase_amount)}</span></div><div><small>Отгружено</small><b>{qty(reportTotals.shipment_kg)} кг</b><span>{money(reportTotals.shipment_amount)}</span></div><div><small>Продано</small><b>{qty(reportTotals.sale_kg)} кг</b><span>{money(reportTotals.sale_amount)}</span></div><div><small>В Ангар</small><b>{qty(reportTotals.transfer_kg)} кг</b><span>перемещение</span></div></div>
 
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">2 · ЛЮДИ</div><h2>Кто сколько взял</h2><span>Обычные расходы и долги отдельно. «Осталось» — текущий долг на сегодня, не только за этот период.</span></div></div>
-          <div className="people-table"><div className="people-head"><span>Сотрудник</span><span>Расходы</span><span>Долг выдан</span><span>Вернул за период</span><span>Осталось должен</span></div>
-          {reportEmployees.map((e:RepEmployee)=><div className={`people-row ${num(e.debt_remaining)>0?'has-debt':''}`} key={e.employee_id}><b>{e.employee_name}</b><span>{money(e.expense_amount)}</span><span>{num(e.loan_amount)>0?money(e.loan_amount):'—'}</span><span>{num(e.repaid_in_period)>0?money(e.repaid_in_period):'—'}</span><span className={num(e.debt_remaining)>0?'warn-text':''}>{num(e.debt_remaining)>0?money(e.debt_remaining):'—'}</span></div>)}
-          {!reportEmployees.length&&<div className="empty-state compact">За период расходов и долгов нет.</div>}
-          <div className="people-row total"><b>Итого</b><span>{money(reportEmployees.reduce((s2:number,e:RepEmployee)=>s2+num(e.expense_amount),0))}</span><span>{money(reportEmployees.reduce((s2:number,e:RepEmployee)=>s2+num(e.loan_amount),0))}</span><span>{money(reportEmployees.reduce((s2:number,e:RepEmployee)=>s2+num(e.repaid_in_period),0))}</span><span>{money(reportEmployees.reduce((s2:number,e:RepEmployee)=>s2+num(e.debt_remaining),0))}</span></div></div>
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">2 · ЛЮДИ</div><h2>Кто сколько взял</h2><span>Строго за выбранный период. Нажмите на сотрудника — увидите, когда и на что. Долги «осталось» считаются на сегодня.</span></div></div>
+          <div className="ppl">
+            <div className="ppl-head"><span>Сотрудник</span><span className="ppl-c">Аванс</span><span className="ppl-c">Зарплата</span><span className="ppl-c">Расходы</span><span className="ppl-c">В долг</span><span className="ppl-t">Всего</span></div>
+            {[...mainPeople,...(servicePerson?[servicePerson]:[])].map((x:PersonRep)=>{const k=x.employee_id||'none';const open=!!openPerson[k];const d=(v:number)=>num(v)>0?money(v):'—';return <div className="ppl-item" key={k}>
+              <button type="button" className={`ppl-row ${open?'open':''} ${x.employee_id==='service'?'svc':''}`} onClick={()=>setOpenPerson({...openPerson,[k]:!open})}>
+                <b>{open?'▾':'▸'} {x.name}{x.employee_id==='service'&&<em className="ppl-names"> ({servicePeople.map(sp=>sp.name).join(', ')})</em>}</b>
+                <span className="ppl-c">{d(x.advance)}</span><span className="ppl-c">{d(x.salary)}</span><span className="ppl-c">{d(x.other)}</span><span className="ppl-c">{d(x.loan_given)}</span><span className="ppl-t"><b>{money(x.total)}</b></span>
+              </button>
+              {open&&<div className="ppl-detail">
+                <div className="ppl-break"><span>Аванс <b>{d(x.advance)}</b></span><span>Зарплата <b>{d(x.salary)}</b></span><span>Расходы <b>{d(x.other)}</b></span>{num(x.loan_given)>0&&<span>В долг <b>{money(x.loan_given)}</b></span>}</div>
+                {x.items.map((it:PersonItem,i:number)=><div className="ppl-line" key={i}><span>{ruDate(String(it.date).slice(0,10))}</span><span>{it.category}{it.is_loan?' (в долг)':''}{it.comment?<em> · {it.comment}</em>:null}</span><b>{money(it.amount)}</b></div>)}
+              </div>}
+            </div>})}
+            {!reportPeople.length&&<div className="empty-state compact">За период расходов и долгов нет.</div>}
+            {reportPeople.length>0&&<div className="ppl-row total"><b>Итого</b><span className="ppl-c">{money(sumP(reportPeople,'advance'))}</span><span className="ppl-c">{money(sumP(reportPeople,'salary'))}</span><span className="ppl-c">{money(sumP(reportPeople,'other'))}</span><span className="ppl-c">{money(sumP(reportPeople,'loan_given'))}</span><span className="ppl-t"><b>{money(peopleTotal)}</b></span></div>}
+            {reportPeople.length>0&&<p className={`ppl-check ${Math.abs(peopleDiff)<1?'ok':'warn'}`}>{Math.abs(peopleDiff)<1?`✓ Сходится с расходами за период: ${money(rt0.expense_amount)}`:`⚠ Не сходится с расходами за период (${money(rt0.expense_amount)}): разница ${money(peopleDiff)}`}</p>}
+          </div>
+          {debtPeople.length>0&&<div className="ppl-debts"><div className="notebook-title">Долги</div>
+            <div className="ppl-dhead"><span>Сотрудник</span><span>Выдан за период</span><span>Вернул за период</span><span>Осталось сегодня</span></div>
+            {debtPeople.map((x:PersonRep)=><div className={`ppl-drow ${num(x.debt_remaining)>0?'has-debt':''}`} key={x.employee_id||'none'}><b>{x.name}</b><span>{num(x.loan_given)>0?money(x.loan_given):'—'}</span><span>{num(x.repaid)>0?money(x.repaid):'—'}</span><span className={num(x.debt_remaining)>0?'warn-text':''}>{num(x.debt_remaining)>0?money(x.debt_remaining):'—'}</span></div>)}
+          </div>}
         </section>
 
         <section className="point-book"><div className="book-title"><div><div className="eyebrow">3 · СТАТЬИ</div><h2>На что ушли деньги</h2><span>Расходы за период по статьям, без выданных долгов.</span></div></div>
