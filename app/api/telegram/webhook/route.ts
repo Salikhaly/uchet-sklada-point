@@ -27,6 +27,7 @@ type Session = {
   step?: string; contractor_id?: string; contractor_name?: string;
   items?: Array<{ product_id: string; product_name: string; kg: number; price: number }>;
   pending_product_id?: string; pending_product_name?: string; pending_default_price?: number; pending_kg?: number;
+  edit_index?: number; // какую позицию корзины сейчас правим
 };
 
 // Черновик накладной живёт в Redis (миллисекунды) — в Supabase бот ходит
@@ -196,6 +197,7 @@ function editReply(chatId: number, messageId: number | undefined, text: string, 
 
 const cartButtons: InlineButton[][] = [
   [{ text: '➕ Добавить ещё товар', callback_data: 'arr:more' }],
+  [{ text: '✏️ Изменить / 🗑 Убрать позицию', callback_data: 'arr:edit' }],
   [{ text: '✅ Завершить приёмку', callback_data: 'arr:finish' }],
   [{ text: '❌ Отмена', callback_data: 'arr:cancel' }],
 ];
@@ -279,6 +281,22 @@ async function handleMessage(message: any): Promise<Reply> {
     await invalidateCatalog(); // список поставщиков изменился
     const [, reply] = await Promise.all([setSession(chatId, telegramUserId, s), productStep(chatId, s)]);
     return reply;
+  }
+
+  if ((s.step === 'editing_kg' || s.step === 'editing_price') && s.edit_index !== undefined) {
+    const item = s.items?.[s.edit_index];
+    if (!item) { s.step = 'cart'; s.edit_index = undefined; await setSession(chatId, telegramUserId, s); return cartReply(chatId, s); }
+    const n = parseNum(text);
+    if (s.step === 'editing_kg') {
+      if (n === null || n <= 0) return sendReply(chatId, 'Нужно число больше 0. Сколько кг?');
+      item.kg = n;
+    } else {
+      if (n === null || n < 0) return sendReply(chatId, 'Нужно число цены за кг (0 или больше).');
+      item.price = n;
+    }
+    s.step = 'cart'; s.edit_index = undefined;
+    await setSession(chatId, telegramUserId, s);
+    return cartReply(chatId, s);
   }
 
   if (s.step === 'awaiting_kg') {
@@ -393,6 +411,53 @@ async function handleCallback(cq: any): Promise<Reply> {
   if (data === 'arr:defprice') {
     if (s.step !== 'awaiting_price' || !s.pending_product_id) return sendReply(chatId, 'Сначала выбери товар.');
     finalizeItem(s, s.pending_default_price ?? 0);
+    await setSession(chatId, telegramUserId, s);
+    return cartReply(chatId, s, messageId);
+  }
+
+  // ── Правка корзины: выбрать позицию → кг / цена / убрать ────────────────
+  if (data === 'arr:back') {
+    s.step = 'cart'; s.edit_index = undefined;
+    await setSession(chatId, telegramUserId, s);
+    return cartReply(chatId, s, messageId);
+  }
+
+  if (data === 'arr:edit') {
+    const items = s.items || [];
+    if (!items.length) return sendReply(chatId, 'Корзина пуста.');
+    const rows: InlineButton[][] = items.map((it, i) => [{ text: `${i + 1}. ${it.product_name} · ${qty(it.kg)} × ${money(it.price)}`, callback_data: `arr:ei:${i}` }]);
+    rows.push([{ text: '← Назад к корзине', callback_data: 'arr:back' }]);
+    return editReply(chatId, messageId, 'Какую позицию изменить?', rows);
+  }
+
+  const editMatch = data.match(/^arr:(ei|ek|ep|ed):(\d+)$/);
+  if (editMatch) {
+    const idx = Number(editMatch[2]);
+    const item = s.items?.[idx];
+    if (!item) return cartReply(chatId, s, messageId); // позиции уже нет — просто показываем корзину
+    const action = editMatch[1];
+
+    if (action === 'ei') {
+      return editReply(chatId, messageId, `«${item.product_name}»: ${qty(item.kg)} × ${money(item.price)} = <b>${money(item.kg * item.price)}</b>\n\nЧто изменить?`, [
+        [{ text: '⚖️ Кг', callback_data: `arr:ek:${idx}` }, { text: '💰 Цена', callback_data: `arr:ep:${idx}` }],
+        [{ text: '🗑 Убрать позицию', callback_data: `arr:ed:${idx}` }],
+        [{ text: '← Назад', callback_data: 'arr:edit' }],
+      ]);
+    }
+    if (action === 'ek' || action === 'ep') {
+      s.step = action === 'ek' ? 'editing_kg' : 'editing_price'; s.edit_index = idx;
+      await setSession(chatId, telegramUserId, s);
+      const prompt = action === 'ek' ? `«${item.product_name}» — сколько кг? (сейчас ${qty(item.kg)})` : `«${item.product_name}» — цена за кг? (сейчас ${money(item.price)})`;
+      return editReply(chatId, messageId, prompt, [[{ text: '← Отмена', callback_data: 'arr:back' }]]);
+    }
+    // ed — убрать позицию
+    s.items!.splice(idx, 1); s.edit_index = undefined;
+    if (!s.items!.length) {
+      s.step = 'choosing_product';
+      const [, reply] = await Promise.all([setSession(chatId, telegramUserId, s), productStep(chatId, s, messageId)]);
+      return reply;
+    }
+    s.step = 'cart';
     await setSession(chatId, telegramUserId, s);
     return cartReply(chatId, s, messageId);
   }
