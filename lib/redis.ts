@@ -1,28 +1,38 @@
-import { Redis } from '@upstash/redis';
+import IORedis from 'ioredis';
 
-// Redis (Upstash) для быстрого состояния бота: черновик накладной, кэш
-// разрешений и каталога. Источники доступа по порядку:
-//  1) KV_REST_API_URL/TOKEN или UPSTASH_REDIS_REST_URL/TOKEN;
-//  2) REDIS_URL (rediss://default:ПАРОЛЬ@хост.upstash.io:6379) — у Upstash пароль
-//     равен REST-токену, а REST-адрес это https://<тот же хост>.
-// Если ничего нет — redis = null, и бот работает через Supabase.
-function resolve(): { url: string; token: string } | null {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (url && token) return { url, token };
+// Redis (Vercel Marketplace → «Redis», регион iad1) для быстрого состояния бота:
+// черновик накладной, кэш разрешений и каталога. Подключение — по REDIS_URL.
+// Если переменной нет или Redis не отвечает, бот прозрачно работает через Supabase.
+const url = process.env.REDIS_URL || process.env.KV_URL;
 
-  const raw = process.env.REDIS_URL || process.env.KV_URL;
-  if (!raw) return null;
-  try {
-    const u = new URL(raw);
-    if (!u.hostname.endsWith('.upstash.io') || !u.password) return null;
-    return { url: `https://${u.hostname}`, token: decodeURIComponent(u.password) };
-  } catch {
-    return null;
-  }
+let client: IORedis | null = null;
+if (url) {
+  client = new IORedis(url, {
+    connectTimeout: 3000,
+    commandTimeout: 1500,      // не ждём «зависший» Redis дольше 1.5 с — дальше откат на Supabase
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: true,
+  });
+  let lastLog = 0;
+  client.on('error', (e) => {
+    if (Date.now() - lastLog > 10_000) { lastLog = Date.now(); console.error('REDIS_CLIENT_ERROR', e?.message); }
+  });
 }
 
-const creds = resolve();
-export const redis: Redis | null = creds ? new Redis(creds) : null;
+// Тонкая обёртка: значения хранятся как JSON, интерфейс как у привычного KV-клиента.
+export const redis = client
+  ? {
+      async get<T = unknown>(key: string): Promise<T | null> {
+        const v = await client!.get(key);
+        return v === null ? null : (JSON.parse(v) as T);
+      },
+      async set(key: string, value: unknown, opts?: { ex?: number }) {
+        const s = JSON.stringify(value);
+        return opts?.ex ? client!.set(key, s, 'EX', opts.ex) : client!.set(key, s);
+      },
+      async del(key: string) { return client!.del(key); },
+      async ping() { return client!.ping(); },
+    }
+  : null;
 
 console.log('BOT_STORE', redis ? 'redis' : 'supabase-fallback');
