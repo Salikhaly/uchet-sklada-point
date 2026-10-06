@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import PointPayroll from './point-payroll';
 import { DailyCharts } from './point-charts';
+import { PeopleViz, ExpensesViz } from './point-report-viz';
 
 type Product = { id:string; name:string; default_price:number; status:string; sort_order?:number; category?:string|null };
 const CATEGORY_ORDER=['Медь','Латунь','Алюминий','Нержавейка','Свинец','Цинк','Чёрный металл','Пластик','Электроника','Смешанное'];
@@ -719,14 +720,6 @@ export default function PointApp(){
               <tfoot><tr><td><b>Итого</b></td><td><b>{qty(metalSum('purchase_kg'))}</b></td><td><b>{money(metalSum('purchase_amount'))}</b></td><td><b>{metalSum('purchase_kg')>0?money(Math.round(metalSum('purchase_amount')/metalSum('purchase_kg')*10)/10):'—'}</b></td>{showShip&&<td><b>{qty(metalSum('shipment_kg'))}</b></td>}{showSale&&<td><b>{qty(metalSum('sale_kg'))}</b></td>}<td><b>{qty(metalSum('stock_kg'))}</b></td></tr></tfoot>
             </table></div>:<div className="empty-state compact">За период движений металла нет.</div>}
           </div>
-          <div className="rep-sec">
-            <div className="notebook-title">Расходы по статьям{catsSorted.length>0&&<em className="rep-total"> · всего {money(catsTotal)}</em>}</div>
-            {catsSorted.length?<div className="exp-list">{catsSorted.map((c:RepCategory)=>{const share=catsTotal>0?num(c.amount)/catsTotal*100:0;return <div className="exp-row" key={c.category}>
-              <span>{c.category}<small>{c.count} {c.count===1?'запись':'записей'}</small></span>
-              <div className="exp-track"><i style={pct(num(c.amount),Math.max(1,num(catsSorted[0].amount)))}/></div>
-              <b>{money(c.amount)}</b><em>{share>0&&share<1?'<1':Math.round(share)}%</em>
-            </div>})}</div>:<div className="empty-state compact">Расходов за период нет.</div>}
-          </div>
         </section>
 
         <div className="stat-cards report-kpis"><div><small>Закуплено</small><b>{qty(reportTotals.purchase_kg)} кг</b><span>{money(reportTotals.purchase_amount)}</span></div><div><small>Отгружено</small><b>{qty(reportTotals.shipment_kg)} кг</b><span>{money(reportTotals.shipment_amount)}</span></div><div><small>Продано</small><b>{qty(reportTotals.sale_kg)} кг</b><span>{money(reportTotals.sale_amount)}</span></div><div><small>В Ангар</small><b>{qty(reportTotals.transfer_kg)} кг</b><span>перемещение</span></div></div>
@@ -736,30 +729,16 @@ export default function PointApp(){
         </section>
 
         <section className="point-book"><div className="book-title"><div><div className="eyebrow">3 · ЛЮДИ</div><h2>Кто сколько взял</h2><span>Строго за выбранный период. Нажмите на сотрудника — увидите, когда и на что. Долги «осталось» считаются на сегодня.</span></div></div>
-          <div className="ppl">
-            <div className="ppl-head"><span>Сотрудник</span><span className="ppl-c">Аванс</span><span className="ppl-c">Зарплата</span><span className="ppl-c">Расходы</span><span className="ppl-c">В долг</span><span className="ppl-t">Всего</span></div>
-            {[...mainPeople,...(servicePerson?[servicePerson]:[])].map((x:PersonRep)=>{const k=x.employee_id||'none';const open=!!openPerson[k];const d=(v:number)=>num(v)>0?money(v):'—';return <div className="ppl-item" key={k}>
-              <button type="button" className={`ppl-row ${open?'open':''} ${x.employee_id==='service'?'svc':''}`} onClick={()=>setOpenPerson({...openPerson,[k]:!open})}>
-                <b>{open?'▾':'▸'} {x.name}{x.employee_id==='service'&&<em className="ppl-names"> ({servicePeople.map(sp=>sp.name).join(', ')})</em>}</b>
-                <span className="ppl-c">{d(x.advance)}</span><span className="ppl-c">{d(x.salary)}</span><span className="ppl-c">{d(x.other)}</span><span className="ppl-c">{d(x.loan_given)}</span><span className="ppl-t"><b>{money(x.total)}</b></span>
-              </button>
-              {open&&<div className="ppl-detail">
-                <div className="ppl-break"><span>Аванс <b>{d(x.advance)}</b></span><span>Зарплата <b>{d(x.salary)}</b></span><span>Расходы <b>{d(x.other)}</b></span>{num(x.loan_given)>0&&<span>В долг <b>{money(x.loan_given)}</b></span>}</div>
-                {x.items.map((it:PersonItem,i:number)=><div className="ppl-line" key={i}><span>{ruDate(String(it.date).slice(0,10))}</span><span>{it.category}{it.is_loan?' (в долг)':''}{it.comment?<em> · {it.comment}</em>:null}</span><b>{money(it.amount)}</b></div>)}
-              </div>}
-            </div>})}
-            {!reportPeople.length&&<div className="empty-state compact">За период расходов и долгов нет.</div>}
-            {reportPeople.length>0&&<div className="ppl-row total"><b>Итого</b><span className="ppl-c">{money(sumP(reportPeople,'advance'))}</span><span className="ppl-c">{money(sumP(reportPeople,'salary'))}</span><span className="ppl-c">{money(sumP(reportPeople,'other'))}</span><span className="ppl-c">{money(sumP(reportPeople,'loan_given'))}</span><span className="ppl-t"><b>{money(peopleTotal)}</b></span></div>}
+          <PeopleViz people={[...mainPeople,...(servicePerson?[servicePerson]:[])]} serviceNames={servicePeople.map(sp=>sp.name).join(', ')}/>
             {reportPeople.length>0&&<p className={`ppl-check ${Math.abs(peopleDiff)<1?'ok':'warn'}`}>{Math.abs(peopleDiff)<1?`✓ Сходится с расходами за период: ${money(rt0.expense_amount)}`:`⚠ Не сходится с расходами за период (${money(rt0.expense_amount)}): разница ${money(peopleDiff)}`}</p>}
-          </div>
           {debtPeople.length>0&&<div className="ppl-debts"><div className="notebook-title">Долги</div>
             <div className="ppl-dhead"><span>Сотрудник</span><span>Выдан за период</span><span>Вернул за период</span><span>Осталось сегодня</span></div>
             {debtPeople.map((x:PersonRep)=><div className={`ppl-drow ${num(x.debt_remaining)>0?'has-debt':''}`} key={x.employee_id||'none'}><b>{x.name}</b><span>{num(x.loan_given)>0?money(x.loan_given):'—'}</span><span>{num(x.repaid)>0?money(x.repaid):'—'}</span><span className={num(x.debt_remaining)>0?'warn-text':''}>{num(x.debt_remaining)>0?money(x.debt_remaining):'—'}</span></div>)}
           </div>}
         </section>
 
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">4 · СТАТЬИ</div><h2>На что ушли деньги</h2><span>Расходы за период по статьям, без выданных долгов.</span></div></div>
-          <div className="report-rows">{reportCategories.map((c:RepCategory)=><div className="report-row" key={c.category}><div><b>{c.category}</b><small>{c.count} операц.</small></div><strong>{money(c.amount)}</strong></div>)}{!reportCategories.length&&<div className="empty-state compact">Категорий нет.</div>}</div>
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">4 · СТАТЬИ</div><h2>На что ушли деньги</h2><span>Расходы за период по статьям, без выданных долгов. Нажмите на статью — увидите записи и динамику по дням.</span></div></div>
+          <ExpensesViz cats={reportCategories} people={reportPeople} from={reportFrom} to={reportTo}/>
         </section>
 
         <section className="point-book"><div className="book-title"><div><div className="eyebrow">5 · СКЛАД</div><h2>По товарам</h2><span>Что покупали, отгружали и сколько осталось, по категориям, в твоём порядке.</span></div></div>{groupByCategory(orderedReportProducts).map(g=><div className="category-block" key={g.category}><div className="category-head"><span className={`category-dot cat-${slugCat(g.category)}`}/><h3>{g.category}</h3><span className="muted">{g.items.length} тов.</span></div><div className="report-product-grid">{g.items.map((p)=><div className="report-product-card" key={p.name}><b>{p.name}</b><span>Остаток: {qty(p.stock_kg)} кг</span><span>Приход: {qty(p.purchase_kg)} кг · {money(p.purchase_amount)}</span><span>Отгрузка: {qty(p.shipment_kg)} кг · {money(p.shipment_amount)}</span><span>Продажа: {qty(p.sale_kg)} кг · {money(p.sale_amount)}</span></div>)}</div></div>)}</section>
