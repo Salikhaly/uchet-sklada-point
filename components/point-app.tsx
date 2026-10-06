@@ -624,7 +624,6 @@ export default function PointApp(){
   const reportDays=report?.days||[];
   const chartDays=[...reportDays].reverse(); // графикам нужен хронологический порядок (слева направо). Без useMemo: он стоял после раннего return и ломал порядок хуков (React #310)
   const rt=report?.totals||{};
-  const netCash=num(rt.actual_cash_last)-num(rt.opening_cash_first);
   const periodProfit=num(rt.sale_amount)-num(rt.sale_cogs)+num(rt.shipment_amount)-num(rt.cogs);
   const reportPeriodLabel=reportFrom===reportTo?ruDate(reportFrom):`${ruDate(reportFrom)} — ${ruDate(reportTo)}`;
   const productIdByName=new Map<string,string>(activeProducts.map((p:Product)=>[p.name,p.id]));
@@ -644,12 +643,35 @@ export default function PointApp(){
   const kgMax=Math.max(1,...dayProducts.map(p=>Math.max(num(p.purchase_kg),num(p.sale_kg),num(p.shipment_kg))));
   const catMax=Math.max(1,...dayCats.map(c=>num(c.amount)));
   const pct=(v:number,max:number)=>({width:Math.max(v>0?2:0,Math.min(100,v/max*100))+'%'});
-  const periodProducts=reportProducts.filter((p)=>num(p.purchase_kg)||num(p.sale_kg)||num(p.shipment_kg));
-  const periodFlowRows=[{label:'Принесли за дни',v:num(rt.brought_cash),plus:true},{label:'Продажи',v:num(rt.sale_amount),plus:true},{label:'Внесения по долгам',v:num(rt.repayment_amount),plus:true},{label:'Закуп',v:num(rt.purchase_amount),plus:false},{label:'Расходы (с долгом)',v:num(rt.expense_amount),plus:false}];
-  const periodFlowMax=Math.max(1,...periodFlowRows.map(f=>f.v),num(rt.opening_cash_first),num(rt.actual_cash_last));
-  const periodKgMax=Math.max(1,...periodProducts.map((p)=>Math.max(num(p.purchase_kg),num(p.sale_kg),num(p.shipment_kg))));
-  const periodCatMax=Math.max(1,...reportCategories.map((c:RepCategory)=>num(c.amount)));
   const orderedReportProducts=[...reportProducts].sort((a,b)=>(productOrder.get(productIdByName.get(a.name)??'')??9999)-(productOrder.get(productIdByName.get(b.name)??'')??9999));
+  // ── Касса: сверка «должно быть» ↔ «посчитали» (только по дням с вечерней сводкой) ──
+  const dIso=(d:RepDay)=>String(d.date).slice(0,10);
+  const daysAsc=[...reportDays].sort((a,b)=>dIso(a).localeCompare(dIso(b)));
+  const sumDays=daysAsc.filter(d=>d.status!==null&&d.opening_cash!=null);
+  const noSumWithOps=daysAsc.filter(d=>d.status===null&&(num(d.ops)>0||num(d.purchase_amount)>0||num(d.expense_amount)>0||num(d.sale_amount)>0));
+  const ledger=(()=>{
+    if(!sumDays.length)return null;
+    const first=sumDays[0],last=sumDays[sumDays.length-1];
+    const add=(k:'brought_cash'|'sale_amount'|'repayment_amount'|'purchase_amount'|'expense_amount')=>sumDays.reduce((a,d)=>a+num(d[k]),0);
+    const closing=(d:RepDay)=>d.actual_cash!=null?num(d.actual_cash):num(d.expected_cash);
+    let gap=0;const gaps:Array<{from:string;to:string;amount:number}>=[];
+    for(let i=1;i<sumDays.length;i++){const g=num(sumDays[i].opening_cash)-closing(sumDays[i-1]);if(Math.abs(g)>=1){gap+=g;gaps.push({from:dIso(sumDays[i-1]),to:dIso(sumDays[i]),amount:g});}}
+    const opening=num(first.opening_cash);
+    const brought=add('brought_cash'),sale=add('sale_amount'),repay=add('repayment_amount'),purchase=add('purchase_amount'),expense=add('expense_amount');
+    const expected=opening+brought+sale+repay-purchase-expense+gap;
+    const counted=last.actual_cash!=null;
+    const actual=counted?num(last.actual_cash):null;
+    return {opening,openDate:dIso(first),brought,sale,repay,purchase,expense,gap,gaps,expected,actual,actualDate:dIso(last),diff:actual!=null?actual-expected:null,lastStatus:last.status};
+  })();
+  const missedPurchase=noSumWithOps.reduce((a,d)=>a+num(d.purchase_amount),0);
+  const missedExpense=noSumWithOps.reduce((a,d)=>a+num(d.expense_amount),0);
+  // ── Металл и расходы за период ──
+  const metalRows=orderedReportProducts.filter(x=>num(x.purchase_kg)||num(x.sale_kg)||num(x.shipment_kg));
+  const metalMax=Math.max(1,...metalRows.map(x=>num(x.purchase_kg)));
+  const showShip=metalRows.some(x=>num(x.shipment_kg)>0),showSale=metalRows.some(x=>num(x.sale_kg)>0);
+  const metalSum=(k:'purchase_kg'|'purchase_amount'|'shipment_kg'|'sale_kg'|'stock_kg')=>metalRows.reduce((a,x)=>a+num(x[k]),0);
+  const catsSorted=[...reportCategories].sort((a,b)=>num(b.amount)-num(a.amount));
+  const catsTotal=catsSorted.reduce((a,c)=>a+num(c.amount),0);
 
   return <main className="warehouse-shell point-dashboard">
     <header className="topbar">
@@ -718,12 +740,51 @@ export default function PointApp(){
 
         {!report?<div className="point-book empty-state"><b>Выберите период</b><span>Отчёт строится по складу Точки.</span></div>:<>
 
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">1 · КАССА ЗА ПЕРИОД</div><h2>Куда двигались деньги</h2><span>Касса на начало периода → касса на конец. Разница объясняется строками ниже.</span></div></div>
-          <div className="cash-bridge"><div><small>Касса на начало</small><b>{rt.opening_cash_first==null?'—':money(rt.opening_cash_first)}</b><span>{ruDate(reportFrom)}</span></div><div className="bridge-arrow">→</div><div><small>Касса на конец</small><b>{rt.actual_cash_last==null?'—':money(rt.actual_cash_last)}</b><span>{ruDate(reportTo)}</span></div><div className={`bridge-net ${netCash>=0?'ok':'warn'}`}><small>Итого набежало</small><b>{netCash>=0?'+':''}{money(netCash)}</b><span>за период</span></div></div>
-          <div className="report-rows cash-lines"><div className="report-row"><div><b>Принесли за дни</b><small>записано в вечерних сводках</small></div><strong>+{money(rt.brought_cash)}</strong></div><div className="report-row"><div><b>Продажи (наличными)</b><small>розница</small></div><strong>+{money(rt.sale_amount)}</strong></div><div className="report-row"><div><b>Внесения по долгам</b><small>вернули то, что брали в долг</small></div><strong>+{money(rt.repayment_amount)}</strong></div><div className="report-row"><div><b>Закуп у населения</b><small>оплачено из кассы</small></div><strong>−{money(rt.purchase_amount)}</strong></div><div className="report-row"><div><b>Расходы (включая долг)</b><small>из них выдано в долг: {money(rt.loan_given_amount)}</small></div><strong>−{money(rt.expense_amount)}</strong></div></div>
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">1 · КАССА ЗА ПЕРИОД</div><h2>Сошлась ли касса</h2><span>Сколько денег должно быть в кассе по записям и сколько насчитали на самом деле. Считаем по дням, где есть вечерняя сводка.</span></div></div>
+          <div className="led">
+            {!ledger?<div className="led-empty"><b>За этот период нет ни одной вечерней сводки — касса не сверялась.</b><span>Заполняйте «Вечер» каждый день, тогда здесь появится сверка.</span></div>:<>
+              <div className="led-row base"><span>Касса на начало<small>{ruDate(ledger.openDate)}</small></span><b>{money(ledger.opening)}</b></div>
+              <div className="led-row plus"><span>Принесли в кассу</span><b>+{money(ledger.brought)}</b></div>
+              {ledger.sale>0&&<div className="led-row plus"><span>Продажи наличными</span><b>+{money(ledger.sale)}</b></div>}
+              {ledger.repay>0&&<div className="led-row plus"><span>Вернули долги</span><b>+{money(ledger.repay)}</b></div>}
+              <div className="led-row minus"><span>Закуп<small>оплачено из кассы</small></span><b>−{money(ledger.purchase)}</b></div>
+              <div className="led-row minus"><span>Расходы<small>{num(rt.loan_given_amount)>0?`из них выдано в долг: ${money(rt.loan_given_amount)}`:'зарплата, аванс, еда и т.д.'}</small></span><b>−{money(ledger.expense)}</b></div>
+              {Math.abs(ledger.gap)>=1&&<div className="led-row gap"><span>Дни без сводки<small>касса менялась, а записей нет</small></span><b>{ledger.gap>0?'+':'−'}{money(Math.abs(ledger.gap))}</b></div>}
+              <div className="led-row sub"><span>Должно быть в кассе</span><b>{money(ledger.expected)}</b></div>
+              <div className="led-row sub"><span>Насчитали по факту<small>{ruDate(ledger.actualDate)}</small></span><b>{ledger.actual==null?'ещё не считали':money(ledger.actual)}</b></div>
+              <div className={`led-result ${ledger.diff==null?'wait':Math.abs(ledger.diff)<1?'ok':ledger.diff<0?'bad':'plus'}`}>
+                {ledger.diff==null?'Кассу в последний день ещё не посчитали':Math.abs(ledger.diff)<1?'✓ Касса сошлась':ledger.diff<0?`Недостача ${money(-ledger.diff)}`:`Излишек ${money(ledger.diff)}`}
+              </div>
+            </>}
+            {noSumWithOps.length>0&&<p className="led-note warn">Нет вечерней сводки за дни с операциями: {noSumWithOps.map(d=>ruDate(dIso(d))).join(', ')}.{(missedPurchase>0||missedExpense>0)&&<> Закуп {money(missedPurchase)} и расходы {money(missedExpense)} за эти дни в сверку не вошли.</>}</p>}
+            {ledger?.gaps.map(g=><p className="led-note" key={g.from}>Между {ruDate(g.from)} и {ruDate(g.to)} сводок нет: касса изменилась на {g.amount>0?'+':'−'}{money(Math.abs(g.amount))} без записей.</p>)}
+            {ledger?.lastStatus==='DRAFT'&&<p className="led-note">День {ruDate(ledger.actualDate)} ещё не закрыт — цифры могут измениться.</p>}
+          </div>
           <div className="stat-cards report-kpis"><div><small>Дней в периоде</small><b>{rt.days_total}</b><span>закрыто: {rt.days_closed}</span></div><div><small>С расхождением кассы</small><b className={num(rt.days_variance)>0?'warn':''}>{rt.days_variance}</b><span>из {rt.days_total} дней</span></div><div><small>Прибыль от металла</small><b>{money(periodProfit)}</b><span>продажа+отгрузка минус себестоимость</span></div><div><small>Не погашено долгов</small><b className={openLoans.length?'warn':''}>{money(openRemaining)}</b><span>на сегодня, {openLoans.length} чел.</span></div></div>
-          <div className="info-flow">{periodFlowRows.map(f=><div className="info-row" key={f.label}><span>{f.label}</span><div className="info-track"><i className={f.plus?'plus':'minus'} style={pct(f.v,periodFlowMax)}/></div><b>{f.plus?'+':'−'}{money(f.v)}</b></div>)}{rt.opening_cash_first!=null&&<div className="info-row total"><span>Касса на начало</span><div className="info-track"><i className="exp" style={pct(num(rt.opening_cash_first),periodFlowMax)}/></div><b>{money(rt.opening_cash_first)}</b></div>}{rt.actual_cash_last!=null&&<div className="info-row total"><span>Касса на конец</span><div className="info-track"><i className="fact" style={pct(num(rt.actual_cash_last),periodFlowMax)}/></div><b>{money(rt.actual_cash_last)}</b></div>}</div>
-          <div className="info-cols"><div><div className="notebook-title">Металл за период, кг</div><div className="info-legend"><em className="l-buy">закуп</em><em className="l-ship">отгрузка</em><em className="l-sale">продажа</em></div>{periodProducts.length?periodProducts.map((p)=><div className="info-prod" key={p.name}><b>{p.name}</b><div className="info-bars"><div className="info-track"><i className="buy" style={pct(num(p.purchase_kg),periodKgMax)}/></div><div className="info-track"><i className="ship" style={pct(num(p.shipment_kg),periodKgMax)}/></div><div className="info-track"><i className="sale" style={pct(num(p.sale_kg),periodKgMax)}/></div></div><span>{qty(p.purchase_kg)} / {qty(p.shipment_kg)} / {qty(p.sale_kg)}</span></div>):<div className="empty-state compact">За период движений металла нет.</div>}</div><div><div className="notebook-title">Расходы по статьям</div>{reportCategories.length?reportCategories.map((c:RepCategory)=><div className="info-row" key={c.category}><span>{c.category}</span><div className="info-track"><i className="minus" style={pct(num(c.amount),periodCatMax)}/></div><b>{money(c.amount)}</b></div>):<div className="empty-state compact">Расходов за период нет.</div>}</div></div>
+          <div className="rep-sec">
+            <div className="notebook-title">Металл за период</div>
+            {metalRows.length?<div className="mt-wrap"><table className="mt-table">
+              <thead><tr><th>Металл</th><th>Закуплено, кг</th><th>На сумму</th><th>Цена, ₸/кг</th>{showShip&&<th>Отгружено, кг</th>}{showSale&&<th>Продано, кг</th>}<th>На складе сейчас, кг</th></tr></thead>
+              <tbody>{metalRows.map(x=><tr key={x.name}>
+                <td><b>{x.name}</b></td>
+                <td><div className="mt-bar"><i style={pct(num(x.purchase_kg),metalMax)}/><span>{num(x.purchase_kg)>0?qty(x.purchase_kg):'—'}</span></div></td>
+                <td>{num(x.purchase_amount)>0?money(x.purchase_amount):'—'}</td>
+                <td>{num(x.purchase_kg)>0?money(Math.round(num(x.purchase_amount)/num(x.purchase_kg)*10)/10):'—'}</td>
+                {showShip&&<td>{num(x.shipment_kg)>0?qty(x.shipment_kg):'—'}</td>}
+                {showSale&&<td>{num(x.sale_kg)>0?qty(x.sale_kg):'—'}</td>}
+                <td className="mt-stock">{qty(x.stock_kg)}</td>
+              </tr>)}</tbody>
+              <tfoot><tr><td><b>Итого</b></td><td><b>{qty(metalSum('purchase_kg'))}</b></td><td><b>{money(metalSum('purchase_amount'))}</b></td><td><b>{metalSum('purchase_kg')>0?money(Math.round(metalSum('purchase_amount')/metalSum('purchase_kg')*10)/10):'—'}</b></td>{showShip&&<td><b>{qty(metalSum('shipment_kg'))}</b></td>}{showSale&&<td><b>{qty(metalSum('sale_kg'))}</b></td>}<td><b>{qty(metalSum('stock_kg'))}</b></td></tr></tfoot>
+            </table></div>:<div className="empty-state compact">За период движений металла нет.</div>}
+          </div>
+          <div className="rep-sec">
+            <div className="notebook-title">Расходы по статьям{catsSorted.length>0&&<em className="rep-total"> · всего {money(catsTotal)}</em>}</div>
+            {catsSorted.length?<div className="exp-list">{catsSorted.map((c:RepCategory)=>{const share=catsTotal>0?num(c.amount)/catsTotal*100:0;return <div className="exp-row" key={c.category}>
+              <span>{c.category}<small>{c.count} {c.count===1?'запись':'записей'}</small></span>
+              <div className="exp-track"><i style={pct(num(c.amount),Math.max(1,num(catsSorted[0].amount)))}/></div>
+              <b>{money(c.amount)}</b><em>{share>0&&share<1?'<1':Math.round(share)}%</em>
+            </div>})}</div>:<div className="empty-state compact">Расходов за период нет.</div>}
+          </div>
         </section>
 
         <div className="stat-cards report-kpis"><div><small>Закуплено</small><b>{qty(reportTotals.purchase_kg)} кг</b><span>{money(reportTotals.purchase_amount)}</span></div><div><small>Отгружено</small><b>{qty(reportTotals.shipment_kg)} кг</b><span>{money(reportTotals.shipment_amount)}</span></div><div><small>Продано</small><b>{qty(reportTotals.sale_kg)} кг</b><span>{money(reportTotals.sale_amount)}</span></div><div><small>В Ангар</small><b>{qty(reportTotals.transfer_kg)} кг</b><span>перемещение</span></div></div>
