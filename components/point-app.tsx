@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import PointPayroll from './point-payroll';
+import { DailyCharts } from './point-charts';
 
 type Product = { id:string; name:string; default_price:number; status:string; sort_order?:number; category?:string|null };
 const CATEGORY_ORDER=['Медь','Латунь','Алюминий','Нержавейка','Свинец','Цинк','Чёрный металл','Пластик','Электроника','Смешанное'];
@@ -62,70 +63,11 @@ const today=()=>fmtDate(new Date());
 const addDays=(date:string,days:number)=>{const [y,m,d]=date.split('-').map(Number);return fmtDate(new Date(y,m-1,d+days));};
 const ruDate=(iso:string)=>{const [y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('ru-RU',{weekday:'short',day:'2-digit',month:'2-digit'});};
 const startOfMonth=(date:string)=>date.slice(0,8)+'01';
-const shortDay=(iso:string)=>iso.slice(8,10);
 
 // ── Инфографика по дням (закуп и средняя цена металла) ──
 // Общий формат: 100×36 viewBox, растягивается на всю ширину контейнера.
 // Подписи дат показываем не под каждым баром (тесно при месяце), а раз в
 // несколько дней, плюс полная дата видна в title при наведении/тапе.
-function dayTicks(n:number){
-  if(n<=10)return Array.from({length:n},(_,i)=>i);
-  const step=Math.ceil(n/8);
-  const ticks=[0];
-  for(let i=step;i<n-1;i+=step)ticks.push(i);
-  ticks.push(n-1);
-  return [...new Set(ticks)];
-}
-
-function DailyBarChart({days}:{days:RepDay[]}){
-  const vals=days.map(d=>num(d.purchase_amount));
-  const max=Math.max(1,...vals);
-  const ticks=dayTicks(days.length);
-  const total=vals.reduce((s,v)=>s+v,0);
-  const avg=days.length?total/days.length:0;
-  if(!days.length)return <div className="empty-state compact">Нет данных за период.</div>;
-  return (
-    <div className="daychart">
-      <div className="daychart-head"><span>Сумма за период: <b>{money(total)}</b></span><span>В среднем за день: <b>{money(avg)}</b></span></div>
-      <div className="daychart-bars">
-        {days.map((d,i)=>{const v=vals[i];const h=Math.max(v>0?3:0,Math.round(v/max*100));
-          return <div className="daychart-col" key={d.date} title={`${ruDate(d.date)}: ${money(v)}${num(d.purchase_kg)>0?` · ${qty(d.purchase_kg)} кг`:''}`}>
-            <div className="daychart-track"><div className="daychart-bar buy" style={{height:h+'%'}}/></div>
-            <small>{ticks.includes(i)?shortDay(d.date):''}</small>
-          </div>;})}
-      </div>
-    </div>
-  );
-}
-
-function DailyPriceChart({days}:{days:RepDay[]}){
-  const points=days.map(d=>({date:d.date,price:num(d.purchase_kg)>0?num(d.purchase_amount)/num(d.purchase_kg):null}));
-  const withPrice=points.filter(p=>p.price!=null) as Array<{date:string;price:number}>;
-  if(!withPrice.length)return <div className="empty-state compact">За период не было закупа — считать среднюю цену не по чему.</div>;
-  const prices=withPrice.map(p=>p.price);
-  const min=Math.min(...prices),max=Math.max(...prices);
-  const span=Math.max(1,max-min);
-  const avg=prices.reduce((s,v)=>s+v,0)/prices.length;
-  const n=points.length;
-  const x=(i:number)=>n<=1?50:(i/(n-1))*100;
-  const y=(v:number)=>100-((v-min)/span)*84-8; // 8..92, с отступами сверху/снизу
-  const pathPts=points.map((p,i)=>p.price==null?null:`${x(i)},${y(p.price)}`).filter(Boolean) as string[];
-  const path=pathPts.length>1?`M${pathPts.join(' L')}`:'';
-  const ticks=dayTicks(n);
-  return (
-    <div className="daychart">
-      <div className="daychart-head"><span>Средняя: <b>{money(avg)}/кг</b></span><span>Мин: <b>{money(min)}/кг</b></span><span>Макс: <b>{money(max)}/кг</b></span></div>
-      <svg className="pricechart" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <line x1="0" y1={y(avg)} x2="100" y2={y(avg)} className="pricechart-avg"/>
-        {path&&<path d={path} className="pricechart-line"/>}
-        {points.map((p,i)=>p.price==null?null:<circle key={p.date} cx={x(i)} cy={y(p.price)} r="1.6" className="pricechart-dot"><title>{`${ruDate(p.date)}: ${money(p.price)}/кг`}</title></circle>)}
-      </svg>
-      <div className="daychart-bars daychart-bars-ticks">
-        {points.map((p,i)=><div className="daychart-col" key={p.date}><small>{ticks.includes(i)?shortDay(p.date):''}</small></div>)}
-      </div>
-    </div>
-  );
-}
 
 function mapState(raw:unknown):PointState{
   const obj=(raw&&typeof raw==='object')?raw as Record<string,unknown>:{};
@@ -789,11 +731,8 @@ export default function PointApp(){
 
         <div className="stat-cards report-kpis"><div><small>Закуплено</small><b>{qty(reportTotals.purchase_kg)} кг</b><span>{money(reportTotals.purchase_amount)}</span></div><div><small>Отгружено</small><b>{qty(reportTotals.shipment_kg)} кг</b><span>{money(reportTotals.shipment_amount)}</span></div><div><small>Продано</small><b>{qty(reportTotals.sale_kg)} кг</b><span>{money(reportTotals.sale_amount)}</span></div><div><small>В Ангар</small><b>{qty(reportTotals.transfer_kg)} кг</b><span>перемещение</span></div></div>
 
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">2 · ПО ДНЯМ</div><h2>Закуп и цена металла по дням</h2><span>Каждый бар/точка — один день периода. Наведи или нажми, чтобы увидеть дату и точную сумму.</span></div></div>
-          <div className="daychart-grid">
-            <div><div className="notebook-title">Закуп по дням, ₸</div><DailyBarChart days={chartDays}/></div>
-            <div><div className="notebook-title">Средняя цена металла по дням, ₸/кг</div><DailyPriceChart days={chartDays}/></div>
-          </div>
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">2 · ПО ДНЯМ</div><h2>Закуп и цена по дням</h2><span>Наведите на день (или коснитесь на телефоне): увидите сумму, вес и цену. Столбики можно переключить между суммой и весом.</span></div></div>
+          <DailyCharts days={chartDays}/>
         </section>
 
         <section className="point-book"><div className="book-title"><div><div className="eyebrow">3 · ЛЮДИ</div><h2>Кто сколько взял</h2><span>Строго за выбранный период. Нажмите на сотрудника — увидите, когда и на что. Долги «осталось» считаются на сегодня.</span></div></div>
