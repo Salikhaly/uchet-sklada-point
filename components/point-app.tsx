@@ -622,7 +622,7 @@ export default function PointApp(){
   const reportCategories=report?.categories||[];
   const reportProducts=report?.products||[];
   const reportDays=report?.days||[];
-  const chartDays=useMemo(()=>[...reportDays].reverse(),[reportDays]); // графикам нужен хронологический порядок (слева направо)
+  const chartDays=[...reportDays].reverse(); // графикам нужен хронологический порядок (слева направо). Без useMemo: он стоял после раннего return и ломал порядок хуков (React #310)
   const rt=report?.totals||{};
   const netCash=num(rt.actual_cash_last)-num(rt.opening_cash_first);
   const periodProfit=num(rt.sale_amount)-num(rt.sale_cogs)+num(rt.shipment_amount)-num(rt.cogs);
