@@ -39,7 +39,7 @@ type RepEmployee={employee_id:string;employee_name:string;expense_amount:number;
 type PersonItem={date:string;category:string;amount:number;comment?:string|null;is_loan:boolean};
 type PersonRep={employee_id:string|null;name:string;hidden:boolean;advance:number;salary:number;other:number;loan_given:number;total:number;repaid:number;debt_remaining:number;items:PersonItem[]};
 type RepCategory={category:string;amount:number;count:number};
-type RepDay={date:string;status:string|null;purchase_amount:number;shipment_amount:number;sale_amount:number;expense_amount:number;loan_amount:number;repayment_amount:number;opening_cash:number|null;brought_cash:number|null;actual_cash:number|null;expected_cash:number|null;variance:number|null;ops:number;comment?:string|null};
+type RepDay={date:string;status:string|null;purchase_amount:number;purchase_kg:number;shipment_amount:number;sale_amount:number;expense_amount:number;loan_amount:number;repayment_amount:number;opening_cash:number|null;brought_cash:number|null;actual_cash:number|null;expected_cash:number|null;variance:number|null;ops:number;comment?:string|null};
 const loanLabel={UNPAID:'Не погашен',PARTIAL:'Частично погашен',PAID:'Погашен'} as const;
 type EveningSummary = { id?:string; opening_cash?:number|null; brought_cash?:number|null; actual_cash?:number|null; expected_cash?:number|null; variance?:number|null; status?:string; close_comment?:string|null; note?:string|null };
 type EveningData = { prev_cash?:{date:string;actual_cash:number|null;status?:string}|null; summary?: EveningSummary; expenses?: EveningExpense[]; repayments?: Repayment[]; repayments_amount?:number };
@@ -62,6 +62,70 @@ const today=()=>fmtDate(new Date());
 const addDays=(date:string,days:number)=>{const [y,m,d]=date.split('-').map(Number);return fmtDate(new Date(y,m-1,d+days));};
 const ruDate=(iso:string)=>{const [y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('ru-RU',{weekday:'short',day:'2-digit',month:'2-digit'});};
 const startOfMonth=(date:string)=>date.slice(0,8)+'01';
+const shortDay=(iso:string)=>iso.slice(8,10);
+
+// ── Инфографика по дням (закуп и средняя цена металла) ──
+// Общий формат: 100×36 viewBox, растягивается на всю ширину контейнера.
+// Подписи дат показываем не под каждым баром (тесно при месяце), а раз в
+// несколько дней, плюс полная дата видна в title при наведении/тапе.
+function dayTicks(n:number){
+  if(n<=10)return Array.from({length:n},(_,i)=>i);
+  const step=Math.ceil(n/8);
+  const ticks=[0];
+  for(let i=step;i<n-1;i+=step)ticks.push(i);
+  ticks.push(n-1);
+  return [...new Set(ticks)];
+}
+
+function DailyBarChart({days}:{days:RepDay[]}){
+  const vals=days.map(d=>num(d.purchase_amount));
+  const max=Math.max(1,...vals);
+  const ticks=dayTicks(days.length);
+  const total=vals.reduce((s,v)=>s+v,0);
+  const avg=days.length?total/days.length:0;
+  if(!days.length)return <div className="empty-state compact">Нет данных за период.</div>;
+  return (
+    <div className="daychart">
+      <div className="daychart-head"><span>Сумма за период: <b>{money(total)}</b></span><span>В среднем за день: <b>{money(avg)}</b></span></div>
+      <div className="daychart-bars">
+        {days.map((d,i)=>{const v=vals[i];const h=Math.max(v>0?3:0,Math.round(v/max*100));
+          return <div className="daychart-col" key={d.date} title={`${ruDate(d.date)}: ${money(v)}${num(d.purchase_kg)>0?` · ${qty(d.purchase_kg)} кг`:''}`}>
+            <div className="daychart-track"><div className="daychart-bar buy" style={{height:h+'%'}}/></div>
+            <small>{ticks.includes(i)?shortDay(d.date):''}</small>
+          </div>;})}
+      </div>
+    </div>
+  );
+}
+
+function DailyPriceChart({days}:{days:RepDay[]}){
+  const points=days.map(d=>({date:d.date,price:num(d.purchase_kg)>0?num(d.purchase_amount)/num(d.purchase_kg):null}));
+  const withPrice=points.filter(p=>p.price!=null) as Array<{date:string;price:number}>;
+  if(!withPrice.length)return <div className="empty-state compact">За период не было закупа — считать среднюю цену не по чему.</div>;
+  const prices=withPrice.map(p=>p.price);
+  const min=Math.min(...prices),max=Math.max(...prices);
+  const span=Math.max(1,max-min);
+  const avg=prices.reduce((s,v)=>s+v,0)/prices.length;
+  const n=points.length;
+  const x=(i:number)=>n<=1?50:(i/(n-1))*100;
+  const y=(v:number)=>100-((v-min)/span)*84-8; // 8..92, с отступами сверху/снизу
+  const pathPts=points.map((p,i)=>p.price==null?null:`${x(i)},${y(p.price)}`).filter(Boolean) as string[];
+  const path=pathPts.length>1?`M${pathPts.join(' L')}`:'';
+  const ticks=dayTicks(n);
+  return (
+    <div className="daychart">
+      <div className="daychart-head"><span>Средняя: <b>{money(avg)}/кг</b></span><span>Мин: <b>{money(min)}/кг</b></span><span>Макс: <b>{money(max)}/кг</b></span></div>
+      <svg className="pricechart" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <line x1="0" y1={y(avg)} x2="100" y2={y(avg)} className="pricechart-avg"/>
+        {path&&<path d={path} className="pricechart-line"/>}
+        {points.map((p,i)=>p.price==null?null:<circle key={p.date} cx={x(i)} cy={y(p.price)} r="1.6" className="pricechart-dot"><title>{`${ruDate(p.date)}: ${money(p.price)}/кг`}</title></circle>)}
+      </svg>
+      <div className="daychart-bars daychart-bars-ticks">
+        {points.map((p,i)=><div className="daychart-col" key={p.date}><small>{ticks.includes(i)?shortDay(p.date):''}</small></div>)}
+      </div>
+    </div>
+  );
+}
 
 function mapState(raw:unknown):PointState{
   const obj=(raw&&typeof raw==='object')?raw as Record<string,unknown>:{};
@@ -558,6 +622,7 @@ export default function PointApp(){
   const reportCategories=report?.categories||[];
   const reportProducts=report?.products||[];
   const reportDays=report?.days||[];
+  const chartDays=useMemo(()=>[...reportDays].reverse(),[reportDays]); // графикам нужен хронологический порядок (слева направо)
   const rt=report?.totals||{};
   const netCash=num(rt.actual_cash_last)-num(rt.opening_cash_first);
   const periodProfit=num(rt.sale_amount)-num(rt.sale_cogs)+num(rt.shipment_amount)-num(rt.cogs);
@@ -663,7 +728,14 @@ export default function PointApp(){
 
         <div className="stat-cards report-kpis"><div><small>Закуплено</small><b>{qty(reportTotals.purchase_kg)} кг</b><span>{money(reportTotals.purchase_amount)}</span></div><div><small>Отгружено</small><b>{qty(reportTotals.shipment_kg)} кг</b><span>{money(reportTotals.shipment_amount)}</span></div><div><small>Продано</small><b>{qty(reportTotals.sale_kg)} кг</b><span>{money(reportTotals.sale_amount)}</span></div><div><small>В Ангар</small><b>{qty(reportTotals.transfer_kg)} кг</b><span>перемещение</span></div></div>
 
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">2 · ЛЮДИ</div><h2>Кто сколько взял</h2><span>Строго за выбранный период. Нажмите на сотрудника — увидите, когда и на что. Долги «осталось» считаются на сегодня.</span></div></div>
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">2 · ПО ДНЯМ</div><h2>Закуп и цена металла по дням</h2><span>Каждый бар/точка — один день периода. Наведи или нажми, чтобы увидеть дату и точную сумму.</span></div></div>
+          <div className="daychart-grid">
+            <div><div className="notebook-title">Закуп по дням, ₸</div><DailyBarChart days={chartDays}/></div>
+            <div><div className="notebook-title">Средняя цена металла по дням, ₸/кг</div><DailyPriceChart days={chartDays}/></div>
+          </div>
+        </section>
+
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">3 · ЛЮДИ</div><h2>Кто сколько взял</h2><span>Строго за выбранный период. Нажмите на сотрудника — увидите, когда и на что. Долги «осталось» считаются на сегодня.</span></div></div>
           <div className="ppl">
             <div className="ppl-head"><span>Сотрудник</span><span className="ppl-c">Аванс</span><span className="ppl-c">Зарплата</span><span className="ppl-c">Расходы</span><span className="ppl-c">В долг</span><span className="ppl-t">Всего</span></div>
             {[...mainPeople,...(servicePerson?[servicePerson]:[])].map((x:PersonRep)=>{const k=x.employee_id||'none';const open=!!openPerson[k];const d=(v:number)=>num(v)>0?money(v):'—';return <div className="ppl-item" key={k}>
@@ -686,13 +758,13 @@ export default function PointApp(){
           </div>}
         </section>
 
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">3 · СТАТЬИ</div><h2>На что ушли деньги</h2><span>Расходы за период по статьям, без выданных долгов.</span></div></div>
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">4 · СТАТЬИ</div><h2>На что ушли деньги</h2><span>Расходы за период по статьям, без выданных долгов.</span></div></div>
           <div className="report-rows">{reportCategories.map((c:RepCategory)=><div className="report-row" key={c.category}><div><b>{c.category}</b><small>{c.count} операц.</small></div><strong>{money(c.amount)}</strong></div>)}{!reportCategories.length&&<div className="empty-state compact">Категорий нет.</div>}</div>
         </section>
 
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">4 · СКЛАД</div><h2>По товарам</h2><span>Что покупали, отгружали и сколько осталось, по категориям, в твоём порядке.</span></div></div>{groupByCategory(orderedReportProducts).map(g=><div className="category-block" key={g.category}><div className="category-head"><span className={`category-dot cat-${slugCat(g.category)}`}/><h3>{g.category}</h3><span className="muted">{g.items.length} тов.</span></div><div className="report-product-grid">{g.items.map((p)=><div className="report-product-card" key={p.name}><b>{p.name}</b><span>Остаток: {qty(p.stock_kg)} кг</span><span>Приход: {qty(p.purchase_kg)} кг · {money(p.purchase_amount)}</span><span>Отгрузка: {qty(p.shipment_kg)} кг · {money(p.shipment_amount)}</span><span>Продажа: {qty(p.sale_kg)} кг · {money(p.sale_amount)}</span></div>)}</div></div>)}</section>
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">5 · СКЛАД</div><h2>По товарам</h2><span>Что покупали, отгружали и сколько осталось, по категориям, в твоём порядке.</span></div></div>{groupByCategory(orderedReportProducts).map(g=><div className="category-block" key={g.category}><div className="category-head"><span className={`category-dot cat-${slugCat(g.category)}`}/><h3>{g.category}</h3><span className="muted">{g.items.length} тов.</span></div><div className="report-product-grid">{g.items.map((p)=><div className="report-product-card" key={p.name}><b>{p.name}</b><span>Остаток: {qty(p.stock_kg)} кг</span><span>Приход: {qty(p.purchase_kg)} кг · {money(p.purchase_amount)}</span><span>Отгрузка: {qty(p.shipment_kg)} кг · {money(p.shipment_amount)}</span><span>Продажа: {qty(p.sale_kg)} кг · {money(p.sale_amount)}</span></div>)}</div></div>)}</section>
 
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">5 · ЛИСТ ПО ДНЯМ</div><h2>День за днём</h2><span>Каждая строка — один день. Нажми на день, чтобы открыть его на вкладке «Работа». Жёлтым — расхождение кассы, серым — пустые дни без операций.</span></div></div>
+        <section className="point-book"><div className="book-title"><div><div className="eyebrow">6 · ЛИСТ ПО ДНЯМ</div><h2>День за днём</h2><span>Каждая строка — один день. Нажми на день, чтобы открыть его на вкладке «Работа». Жёлтым — расхождение кассы, серым — пустые дни без операций.</span></div></div>
           <div className="days-sheet"><div className="days-sheet-head"><span>День</span><span>Закуп</span><span>Продажа</span><span>Расходы</span><span>Долг</span><span>Внесли</span><span>Касса</span><span>Комментарий</span></div>
           {reportDays.map((d:RepDay)=>{const empty=!d.status&&!d.ops;const hasVar=d.variance!=null&&num(d.variance)!==0;return <button className={`days-sheet-row ${empty?'empty':''} ${hasVar?'stale':''}`} key={d.date} onClick={()=>{setDate(d.date);setTab('work');}}><span className="dsr-date"><b>{ruDate(d.date)}</b><em className={`day-chip ${d.status==='CLOSED'?'ok':d.status?'warn':'muted'}`}>{d.status==='CLOSED'?'закрыт':d.status==='CHECKED'?'проверен':d.status==='DRAFT'?'черновик':'нет данных'}</em></span><span>{d.purchase_amount?money(d.purchase_amount):'—'}</span><span>{d.sale_amount?money(d.sale_amount):'—'}</span><span>{d.expense_amount?money(d.expense_amount):'—'}</span><span>{d.loan_amount?money(d.loan_amount):'—'}</span><span>{d.repayment_amount?money(d.repayment_amount):'—'}</span><span>{d.actual_cash==null?'—':<>{money(d.actual_cash)}{hasVar&&<em className="warn-text"> ({num(d.variance)>0?'+':''}{money(d.variance)})</em>}</>}</span><span className="dsr-comment">{d.comment||''}</span></button>})}
           {!reportDays.length&&<div className="empty-state compact">Нет данных за период.</div>}</div>
