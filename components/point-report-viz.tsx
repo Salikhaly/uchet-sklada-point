@@ -244,7 +244,7 @@ export function ExpensesViz({ cats, people, from, to }: { cats: VizCategory[]; p
           <b>{sel ? `«${sel}» по дням` : 'Все расходы по дням'}</b>
           <span>{bucketHover !== null && timeline[bucketHover] ? `${timeline[bucketHover].label}: ${rub(timeline[bucketHover].value)}` : sel ? <button type="button" className="pay-link" onClick={() => setSel(null)}>Показать все статьи</button> : 'Наведите на столбик'}</span>
         </div>
-        <div className="ev-bars" onMouseLeave={() => setBucketHover(null)}>
+        <div className="ev-bars" data-noswipe onMouseLeave={() => setBucketHover(null)}>
           {timeline.map((b, i) => (
             <div key={i} className={`ev-col${bucketHover === i ? ' hov' : ''}`} onMouseEnter={() => setBucketHover(i)} onClick={() => setBucketHover(i)}>
               <span className="ev-bar" style={{ height: `${b.value > 0 ? Math.max(4, (b.value / tMax) * 100) : 0}%`, background: tColor, animationDelay: `${Math.min(i * 12, 450)}ms` }} />

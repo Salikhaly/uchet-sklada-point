@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import PointPayroll from './point-payroll';
 import { DailyCharts } from './point-charts';
 import { PeopleViz, ExpensesViz } from './point-report-viz';
+import { ReportScreens, CountUp } from './point-report-shell';
 
 type Product = { id:string; name:string; default_price:number; status:string; sort_order?:number; category?:string|null };
 const CATEGORY_ORDER=['Медь','Латунь','Алюминий','Нержавейка','Свинец','Цинк','Чёрный металл','Пластик','Электроника','Смешанное'];
@@ -679,12 +680,12 @@ export default function PointApp(){
 
       {tab==='payroll'&&<PointPayroll employees={state.employees} categories={state.expenseCategories} notify={notify} onChanged={()=>{loadEvening();loadDays();}}/>}
       {tab==='report'&&<section className="report-screen">
-        <div className="point-book"><div className="book-title"><div><div className="eyebrow">ОТЧЁТЫ ТОЧКИ</div><h2>{reportPeriodLabel}</h2><span>Всё за период одним экраном: касса, кто сколько взял, расходы по статьям и лист по дням для проверки.</span></div></div><div className="report-toolbar"><div className="period-chips"><button className={`chip ${reportPeriod==='week'?'on':''}`} onClick={()=>setPeriod('week')}>7 дней</button><button className={`chip ${reportPeriod==='month'?'on':''}`} onClick={()=>setPeriod('month')}>Месяц</button><button className={`chip ${reportPeriod==='custom'?'on':''}`} onClick={()=>setReportPeriod('custom')}>Свой период</button></div><div className="report-dates"><label><span>С</span><input type="date" value={reportFrom} max={reportTo} onChange={e=>{setReportPeriod('custom');setReportFrom(e.target.value)}}/></label><label><span>По</span><input type="date" value={reportTo} min={reportFrom} max={today()} onChange={e=>{setReportPeriod('custom');setReportTo(e.target.value)}}/></label><button className="primary" onClick={loadReport}>Обновить</button><button onClick={exportReportXlsx}>⬇ Excel</button></div></div></div>
+        <div className="point-book rs-top"><div className="book-title"><div><div className="eyebrow">ОТЧЁТЫ ТОЧКИ</div><h2>{reportPeriodLabel}</h2><span>Листайте экраны: вкладки, стрелки ← → или свайп.</span></div></div><div className="report-toolbar"><div className="period-chips"><button className={`chip ${reportPeriod==='week'?'on':''}`} onClick={()=>setPeriod('week')}>7 дней</button><button className={`chip ${reportPeriod==='month'?'on':''}`} onClick={()=>setPeriod('month')}>Месяц</button><button className={`chip ${reportPeriod==='custom'?'on':''}`} onClick={()=>setReportPeriod('custom')}>Свой период</button></div><div className="report-dates"><label><span>С</span><input type="date" value={reportFrom} max={reportTo} onChange={e=>{setReportPeriod('custom');setReportFrom(e.target.value)}}/></label><label><span>По</span><input type="date" value={reportTo} min={reportFrom} max={today()} onChange={e=>{setReportPeriod('custom');setReportTo(e.target.value)}}/></label><button className="primary" onClick={loadReport}>Обновить</button><button onClick={exportReportXlsx}>⬇ Excel</button></div></div></div>
 
         {!report?<div className="point-book empty-state"><b>Выберите период</b><span>Отчёт строится по складу Точки.</span></div>:<>
-
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">1 · КАССА ЗА ПЕРИОД</div><h2>Сошлась ли касса</h2><span>Сколько денег должно быть в кассе по записям и сколько насчитали на самом деле. Считаем по дням, где есть вечерняя сводка.</span></div></div>
-          <div className="led">
+        <ReportScreens screens={[
+          {key:'cash',label:'Касса',icon:'💰',node:<section className="rs-page"><div className="rs-head"><h2>Сошлась ли касса</h2><span>Сколько должно быть в кассе по записям и сколько насчитали. Считаем по дням с вечерней сводкой.</span></div>
+            <div className="rs-cols"><div><div className="led">
             {!ledger?<div className="led-empty"><b>За этот период нет ни одной вечерней сводки — касса не сверялась.</b><span>Заполняйте «Вечер» каждый день, тогда здесь появится сверка.</span></div>:<>
               <div className="led-row base"><span>Касса на начало<small>{ruDate(ledger.openDate)}</small></span><b>{money(ledger.opening)}</b></div>
               <div className="led-row plus"><span>Принесли в кассу</span><b>+{money(ledger.brought)}</b></div>
@@ -702,52 +703,58 @@ export default function PointApp(){
             {noSumWithOps.length>0&&<p className="led-note warn">Нет вечерней сводки за дни с операциями: {noSumWithOps.map(d=>ruDate(dIso(d))).join(', ')}.{(missedPurchase>0||missedExpense>0)&&<> Закуп {money(missedPurchase)} и расходы {money(missedExpense)} за эти дни в сверку не вошли.</>}</p>}
             {ledger?.gaps.map(g=><p className="led-note" key={g.from}>Между {ruDate(g.from)} и {ruDate(g.to)} сводок нет: касса изменилась на {g.amount>0?'+':'−'}{money(Math.abs(g.amount))} без записей.</p>)}
             {ledger?.lastStatus==='DRAFT'&&<p className="led-note">День {ruDate(ledger.actualDate)} ещё не закрыт — цифры могут измениться.</p>}
-          </div>
-          <div className="stat-cards report-kpis"><div><small>Дней в периоде</small><b>{rt.days_total}</b><span>закрыто: {rt.days_closed}</span></div><div><small>С расхождением кассы</small><b className={num(rt.days_variance)>0?'warn':''}>{rt.days_variance}</b><span>из {rt.days_total} дней</span></div><div><small>Прибыль от металла</small><b>{money(periodProfit)}</b><span>продажа+отгрузка минус себестоимость</span></div><div><small>Не погашено долгов</small><b className={openLoans.length?'warn':''}>{money(openRemaining)}</b><span>на сегодня, {openLoans.length} чел.</span></div></div>
-          <div className="rep-sec">
-            <div className="notebook-title">Металл за период</div>
-            {metalRows.length?<div className="mt-wrap"><table className="mt-table">
-              <thead><tr><th>Металл</th><th>Закуплено, кг</th><th>На сумму</th><th>Цена, ₸/кг</th>{showShip&&<th>Отгружено, кг</th>}{showSale&&<th>Продано, кг</th>}<th>На складе сейчас, кг</th></tr></thead>
-              <tbody>{metalRows.map(x=><tr key={x.name}>
-                <td><b>{x.name}</b></td>
-                <td><div className="mt-bar"><i style={pct(num(x.purchase_kg),metalMax)}/><span>{num(x.purchase_kg)>0?qty(x.purchase_kg):'—'}</span></div></td>
-                <td>{num(x.purchase_amount)>0?money(x.purchase_amount):'—'}</td>
-                <td>{num(x.purchase_kg)>0?money(Math.round(num(x.purchase_amount)/num(x.purchase_kg)*10)/10):'—'}</td>
-                {showShip&&<td>{num(x.shipment_kg)>0?qty(x.shipment_kg):'—'}</td>}
-                {showSale&&<td>{num(x.sale_kg)>0?qty(x.sale_kg):'—'}</td>}
-                <td className="mt-stock">{qty(x.stock_kg)}</td>
-              </tr>)}</tbody>
-              <tfoot><tr><td><b>Итого</b></td><td><b>{qty(metalSum('purchase_kg'))}</b></td><td><b>{money(metalSum('purchase_amount'))}</b></td><td><b>{metalSum('purchase_kg')>0?money(Math.round(metalSum('purchase_amount')/metalSum('purchase_kg')*10)/10):'—'}</b></td>{showShip&&<td><b>{qty(metalSum('shipment_kg'))}</b></td>}{showSale&&<td><b>{qty(metalSum('sale_kg'))}</b></td>}<td><b>{qty(metalSum('stock_kg'))}</b></td></tr></tfoot>
-            </table></div>:<div className="empty-state compact">За период движений металла нет.</div>}
-          </div>
-        </section>
-
-        <div className="stat-cards report-kpis"><div><small>Закуплено</small><b>{qty(reportTotals.purchase_kg)} кг</b><span>{money(reportTotals.purchase_amount)}</span></div><div><small>Отгружено</small><b>{qty(reportTotals.shipment_kg)} кг</b><span>{money(reportTotals.shipment_amount)}</span></div><div><small>Продано</small><b>{qty(reportTotals.sale_kg)} кг</b><span>{money(reportTotals.sale_amount)}</span></div><div><small>В Ангар</small><b>{qty(reportTotals.transfer_kg)} кг</b><span>перемещение</span></div></div>
-
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">2 · ПО ДНЯМ</div><h2>Закуп и цена по дням</h2><span>Наведите на день (или коснитесь на телефоне): увидите сумму, вес и цену. Столбики можно переключить между суммой и весом.</span></div></div>
-          <DailyCharts days={chartDays}/>
-        </section>
-
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">3 · ЛЮДИ</div><h2>Кто сколько взял</h2><span>Строго за выбранный период. Нажмите на сотрудника — увидите, когда и на что. Долги «осталось» считаются на сегодня.</span></div></div>
-          <PeopleViz people={[...mainPeople,...(servicePerson?[servicePerson]:[])]} serviceNames={servicePeople.map(sp=>sp.name).join(', ')}/>
+          </div></div><div className="rs-kpis">
+              <div className="kpi"><i className="kpi-ico">📅</i><small>Закрыто дней</small><b><CountUp value={num(rt.days_closed)} format={v=>String(Math.round(v))}/><em> из {rt.days_total}</em></b><span>вечерняя сводка закрыта</span><div className="kpi-prog"><i style={{width:`${num(rt.days_total)>0?Math.round(num(rt.days_closed)/num(rt.days_total)*100):0}%`}}/></div></div>
+              <div className={`kpi ${num(rt.days_variance)>0?'warn':''}`}><i className="kpi-ico">⚖️</i><small>Дней с расхождением кассы</small><b><CountUp value={num(rt.days_variance)} format={v=>String(Math.round(v))}/><em> из {sumDays.length}</em></b><span>среди дней со сводкой</span></div>
+              <div className={`kpi ${periodProfit<0?'warn':'good'}`}><i className="kpi-ico">💎</i><small>Прибыль от металла</small><b><CountUp value={periodProfit} format={v=>money(v)}/></b><span>продажа + отгрузка − себестоимость, без расходов</span></div>
+              <div className={`kpi ${openLoans.length?'warn':''}`}><i className="kpi-ico">🧾</i><small>Не погашено долгов</small><b><CountUp value={num(openRemaining)} format={v=>money(v)}/></b><span>на сегодня, {openLoans.length} чел.</span></div>
+            </div></div>
+          </section>},
+          {key:'days',label:'По дням',icon:'📈',node:<section className="rs-page"><div className="rs-head"><h2>Закуп и цена по дням</h2><span>Наведите на день (на телефоне — коснитесь): сумма, вес и цена.</span></div>
+            <DailyCharts days={chartDays}/>
+          </section>},
+          {key:'people',label:'Люди',icon:'👥',node:<section className="rs-page"><div className="rs-head"><h2>Кто сколько взял</h2><span>Строго за период. Нажмите на сотрудника — увидите записи.</span></div>
+            <PeopleViz people={[...mainPeople,...(servicePerson?[servicePerson]:[])]} serviceNames={servicePeople.map(sp=>sp.name).join(', ')}/>
             {reportPeople.length>0&&<p className={`ppl-check ${Math.abs(peopleDiff)<1?'ok':'warn'}`}>{Math.abs(peopleDiff)<1?`✓ Сходится с расходами за период: ${money(rt0.expense_amount)}`:`⚠ Не сходится с расходами за период (${money(rt0.expense_amount)}): разница ${money(peopleDiff)}`}</p>}
           {debtPeople.length>0&&<div className="ppl-debts"><div className="notebook-title">Долги</div>
             <div className="ppl-dhead"><span>Сотрудник</span><span>Выдан за период</span><span>Вернул за период</span><span>Осталось сегодня</span></div>
             {debtPeople.map((x:PersonRep)=><div className={`ppl-drow ${num(x.debt_remaining)>0?'has-debt':''}`} key={x.employee_id||'none'}><b>{x.name}</b><span>{num(x.loan_given)>0?money(x.loan_given):'—'}</span><span>{num(x.repaid)>0?money(x.repaid):'—'}</span><span className={num(x.debt_remaining)>0?'warn-text':''}>{num(x.debt_remaining)>0?money(x.debt_remaining):'—'}</span></div>)}
           </div>}
-        </section>
-
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">4 · СТАТЬИ</div><h2>На что ушли деньги</h2><span>Расходы за период по статьям, без выданных долгов. Нажмите на статью — увидите записи и динамику по дням.</span></div></div>
-          <ExpensesViz cats={reportCategories} people={reportPeople} from={reportFrom} to={reportTo}/>
-        </section>
-
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">5 · СКЛАД</div><h2>По товарам</h2><span>Что покупали, отгружали и сколько осталось, по категориям, в твоём порядке.</span></div></div>{groupByCategory(orderedReportProducts).map(g=><div className="category-block" key={g.category}><div className="category-head"><span className={`category-dot cat-${slugCat(g.category)}`}/><h3>{g.category}</h3><span className="muted">{g.items.length} тов.</span></div><div className="report-product-grid">{g.items.map((p)=><div className="report-product-card" key={p.name}><b>{p.name}</b><span>Остаток: {qty(p.stock_kg)} кг</span><span>Приход: {qty(p.purchase_kg)} кг · {money(p.purchase_amount)}</span><span>Отгрузка: {qty(p.shipment_kg)} кг · {money(p.shipment_amount)}</span><span>Продажа: {qty(p.sale_kg)} кг · {money(p.sale_amount)}</span></div>)}</div></div>)}</section>
-
-        <section className="point-book"><div className="book-title"><div><div className="eyebrow">6 · ЛИСТ ПО ДНЯМ</div><h2>День за днём</h2><span>Каждая строка — один день. Нажми на день, чтобы открыть его на вкладке «Работа». Жёлтым — расхождение кассы, серым — пустые дни без операций.</span></div></div>
-          <div className="days-sheet"><div className="days-sheet-head"><span>День</span><span>Закуп</span><span>Продажа</span><span>Расходы</span><span>Долг</span><span>Внесли</span><span>Касса</span><span>Комментарий</span></div>
+          </section>},
+          {key:'cats',label:'Статьи',icon:'🧾',node:<section className="rs-page"><div className="rs-head"><h2>На что ушли деньги</h2><span>Без выданных долгов. Нажмите на статью — записи и динамика.</span></div>
+            <ExpensesViz cats={reportCategories} people={reportPeople} from={reportFrom} to={reportTo}/>
+          </section>},
+          {key:'metal',label:'Металл',icon:'⚖️',node:<section className="rs-page"><div className="rs-head"><h2>Металл и склад</h2><span>Закуп, отгрузка и остаток по категориям.</span></div>
+            <div className="rs-kpis four">
+              <div className="kpi"><i className="kpi-ico">📥</i><small>Закуплено</small><b><CountUp value={num(reportTotals.purchase_kg)} format={v=>qty(v)+' кг'}/></b><span>{money(reportTotals.purchase_amount)}</span></div>
+              <div className="kpi"><i className="kpi-ico">🚚</i><small>Отгружено</small><b><CountUp value={num(reportTotals.shipment_kg)} format={v=>qty(v)+' кг'}/></b><span>{money(reportTotals.shipment_amount)}</span></div>
+              <div className="kpi"><i className="kpi-ico">💵</i><small>Продано</small><b><CountUp value={num(reportTotals.sale_kg)} format={v=>qty(v)+' кг'}/></b><span>{money(reportTotals.sale_amount)}</span></div>
+              <div className="kpi"><i className="kpi-ico">🏭</i><small>В Ангар</small><b><CountUp value={num(reportTotals.transfer_kg)} format={v=>qty(v)+' кг'}/></b><span>перемещение</span></div>
+            </div>
+            {metalRows.length?<div className="rs-scroll mt-wrap" data-noswipe><table className="mt-table">
+                <thead><tr><th>Металл</th><th>Закуплено, кг</th><th>На сумму</th><th>Цена, ₸/кг</th>{showShip&&<th>Отгружено, кг</th>}{showSale&&<th>Продано, кг</th>}<th>На складе сейчас, кг</th></tr></thead>
+                <tbody>{groupByCategory(metalRows).map(g=><Fragment key={g.category}>
+                  <tr className="mt-cat"><td colSpan={4+(showShip?1:0)+(showSale?1:0)}><span className={`category-dot cat-${slugCat(g.category)}`}/> {g.category}<em> · {qty(g.items.reduce((a,x)=>a+num(x.purchase_kg),0))} кг закуплено</em></td></tr>
+                  {g.items.map(x=><tr key={x.name}>
+                    <td><b>{x.name}</b></td>
+                    <td><div className="mt-bar"><i style={pct(num(x.purchase_kg),metalMax)}/><span>{num(x.purchase_kg)>0?qty(x.purchase_kg):'—'}</span></div></td>
+                    <td>{num(x.purchase_amount)>0?money(x.purchase_amount):'—'}</td>
+                    <td>{num(x.purchase_kg)>0?money(Math.round(num(x.purchase_amount)/num(x.purchase_kg)*10)/10):'—'}</td>
+                    {showShip&&<td>{num(x.shipment_kg)>0?qty(x.shipment_kg):'—'}</td>}
+                    {showSale&&<td>{num(x.sale_kg)>0?qty(x.sale_kg):'—'}</td>}
+                    <td className="mt-stock">{qty(x.stock_kg)}</td>
+                  </tr>)}
+                </Fragment>)}</tbody>
+                <tfoot><tr><td><b>Итого</b></td><td><b>{qty(metalSum('purchase_kg'))}</b></td><td><b>{money(metalSum('purchase_amount'))}</b></td><td><b>{metalSum('purchase_kg')>0?money(Math.round(metalSum('purchase_amount')/metalSum('purchase_kg')*10)/10):'—'}</b></td>{showShip&&<td><b>{qty(metalSum('shipment_kg'))}</b></td>}{showSale&&<td><b>{qty(metalSum('sale_kg'))}</b></td>}<td><b>{qty(metalSum('stock_kg'))}</b></td></tr></tfoot>
+              </table></div>:<div className="empty-state compact">За период движений металла нет.</div>}
+          </section>},
+          {key:'sheet',label:'Дни',icon:'🗓️',node:<section className="rs-page"><div className="rs-head"><h2>День за днём</h2><span>Каждая строка — день. Нажмите, чтобы открыть его в «Вечере».</span></div>
+            <div className="rs-scroll" data-noswipe><div className="days-sheet"><div className="days-sheet-head"><span>День</span><span>Закуп</span><span>Продажа</span><span>Расходы</span><span>Долг</span><span>Внесли</span><span>Касса</span><span>Комментарий</span></div>
           {reportDays.map((d:RepDay)=>{const empty=!d.status&&!d.ops;const hasVar=d.variance!=null&&num(d.variance)!==0;return <button className={`days-sheet-row ${empty?'empty':''} ${hasVar?'stale':''}`} key={d.date} onClick={()=>{setDate(d.date);setTab('work');}}><span className="dsr-date"><b>{ruDate(d.date)}</b><em className={`day-chip ${d.status==='CLOSED'?'ok':d.status?'warn':'muted'}`}>{d.status==='CLOSED'?'закрыт':d.status==='CHECKED'?'проверен':d.status==='DRAFT'?'черновик':'нет данных'}</em></span><span>{d.purchase_amount?money(d.purchase_amount):'—'}</span><span>{d.sale_amount?money(d.sale_amount):'—'}</span><span>{d.expense_amount?money(d.expense_amount):'—'}</span><span>{d.loan_amount?money(d.loan_amount):'—'}</span><span>{d.repayment_amount?money(d.repayment_amount):'—'}</span><span>{d.actual_cash==null?'—':<>{money(d.actual_cash)}{hasVar&&<em className="warn-text"> ({num(d.variance)>0?'+':''}{money(d.variance)})</em>}</>}</span><span className="dsr-comment">{d.comment||''}</span></button>})}
-          {!reportDays.length&&<div className="empty-state compact">Нет данных за период.</div>}</div>
-        </section>
+          {!reportDays.length&&<div className="empty-state compact">Нет данных за период.</div>}</div></div>
+          </section>},
+        ]}/>
+        
 
         </>}
       </section>}

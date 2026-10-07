@@ -147,7 +147,7 @@ function PurchaseChart({ days, active, setActive }: { days: ChartDay[]; active: 
         <div className="pc-chip"><small>Рекордный день</small><b>{stats.best >= 0 ? `${dm(days[stats.best].date)} · ${fmt(vals[stats.best])}` : '—'}</b></div>
         <div className="pc-chip"><small>Дней с закупом</small><b>{stats.worked} из {cnt}</b></div>
       </div>
-      <div className="pc-wrap" ref={ref}>
+      <div className="pc-wrap" ref={ref} data-noswipe>
         {cnt === 0 ? <div className="empty-state compact">Нет данных за период.</div> : w > 0 && (
           <>
             <svg className="pc-svg" width={w} height={H} viewBox={`0 0 ${w} ${H}`} role="img" aria-label="Закуп по дням"
@@ -249,7 +249,7 @@ function PriceChart({ days, active, setActive }: { days: ChartDay[]; active: num
         <div className="pc-chip"><small>Максимум</small><b>{st ? `${nf1.format(st.hi.price)} ₸ · ${dm(st.hi.date)}` : '—'}</b></div>
         <div className={`pc-chip ${st?.change == null ? '' : trendUp ? 'up' : 'down'}`}><small>Изменение с {st ? dm(st.first.date) : '—'}</small><b>{st?.change == null ? '—' : `${trendUp ? '▲' : '▼'} ${nf1.format(Math.abs(st.change))}%`}</b></div>
       </div>
-      <div className="pc-wrap" ref={ref}>
+      <div className="pc-wrap" ref={ref} data-noswipe>
         {cnt === 0 || !st ? <div className="empty-state compact">За период не было закупа — считать среднюю цену не по чему.</div> : w > 0 && (
           <>
             <svg className="pc-svg" width={w} height={H} viewBox={`0 0 ${w} ${H}`} role="img" aria-label="Средняя цена закупа по дням"
