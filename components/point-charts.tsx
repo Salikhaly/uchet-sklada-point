@@ -101,7 +101,7 @@ function Tip({ x, w, day, d }: { x: number; w: number; day: string; d: ChartDay 
   );
 }
 
-function PurchaseChart({ days, active, setActive }: { days: ChartDay[]; active: number | null; setActive: (i: number | null) => void }) {
+export function PurchaseChart({ days, active, setActive, title = 'Закуп по дням' }: { days: ChartDay[]; active: number | null; setActive: (i: number | null) => void; title?: string }) {
   const [ref, w] = useWidth();
   const [metric, setMetric] = useState<'sum' | 'kg'>('sum');
   const cnt = days.length;
@@ -135,7 +135,7 @@ function PurchaseChart({ days, active, setActive }: { days: ChartDay[]; active: 
   return (
     <div className="pc-card">
       <div className="pc-top">
-        <div className="pc-title">Закуп по дням</div>
+        <div className="pc-title">{title}</div>
         <div className="pc-seg">
           <button type="button" className={metric === 'sum' ? 'on' : ''} onClick={() => setMetric('sum')}>Сумма, ₸</button>
           <button type="button" className={metric === 'kg' ? 'on' : ''} onClick={() => setMetric('kg')}>Вес, кг</button>
@@ -192,7 +192,7 @@ function PurchaseChart({ days, active, setActive }: { days: ChartDay[]; active: 
   );
 }
 
-function PriceChart({ days, active, setActive }: { days: ChartDay[]; active: number | null; setActive: (i: number | null) => void }) {
+export function PriceChart({ days, active, setActive, title = 'Средняя цена закупа, ₸/кг' }: { days: ChartDay[]; active: number | null; setActive: (i: number | null) => void; title?: string }) {
   const [ref, w] = useWidth();
   const cnt = days.length;
   const pts = useMemo(() => days.map((d, i) => ({ i, date: d.date, kg: n(d.purchase_kg), amount: n(d.purchase_amount), price: n(d.purchase_kg) > 0 ? n(d.purchase_amount) / n(d.purchase_kg) : null })), [days]);
@@ -242,7 +242,7 @@ function PriceChart({ days, active, setActive }: { days: ChartDay[]; active: num
 
   return (
     <div className="pc-card">
-      <div className="pc-top"><div className="pc-title">Средняя цена закупа, ₸/кг</div></div>
+      <div className="pc-top"><div className="pc-title">{title}</div></div>
       <div className="pc-chips">
         <div className="pc-chip"><small>Средняя за период</small><b>{st ? `${nf1.format(st.avg)} ₸` : '—'}</b></div>
         <div className="pc-chip"><small>Минимум</small><b>{st ? `${nf1.format(st.lo.price)} ₸ · ${dm(st.lo.date)}` : '—'}</b></div>
@@ -298,6 +298,24 @@ export function DailyCharts({ days }: { days: ChartDay[] }) {
     <div className="pc-grid" onPointerLeave={(e) => { if (e.pointerType === 'mouse') setActive(null); }}>
       <PurchaseChart days={sorted} active={active} setActive={setActive} />
       <PriceChart days={sorted} active={active} setActive={setActive} />
+    </div>
+  );
+}
+
+// Один график за раз (цена ИЛИ закуп) — для панели выбранного металла.
+export function MetalCharts({ days, name }: { days: ChartDay[]; name: string }) {
+  const [view, setView] = useState<'price' | 'buy'>('price');
+  const [active, setActive] = useState<number | null>(null);
+  const sorted = useMemo(() => [...days].sort((p, q) => iso(p.date).localeCompare(iso(q.date))), [days]);
+  return (
+    <div className="mc">
+      <div className="pc-seg mc-seg">
+        <button type="button" className={view === 'price' ? 'on' : ''} onClick={() => setView('price')}>Цена, ₸/кг</button>
+        <button type="button" className={view === 'buy' ? 'on' : ''} onClick={() => setView('buy')}>Закуп</button>
+      </div>
+      {view === 'price'
+        ? <PriceChart days={sorted} active={active} setActive={setActive} title={`${name}: цена закупа, ₸/кг`} />
+        : <PurchaseChart days={sorted} active={active} setActive={setActive} title={`${name}: закуп по дням`} />}
     </div>
   );
 }

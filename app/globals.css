@@ -629,3 +629,19 @@
 @media(max-width:640px){.rs-lab{display:none}.rs-tab{padding:12px 4px}.rs-ico{font-size:19px}.rs-page{padding:12px}.rs-head h2{font-size:19px}.kpi b{font-size:22px}}
 @media(max-height:760px){.rs-head span{display:none}}
 @media(prefers-reduced-motion:reduce){.rs-pane,.kpi,.led-row,.led-result,.kpi-prog i{animation:none}.rs-ind{transition:none}}
+
+/* ── Отчёт Точки: экран «Цены по металлам» ── */
+.mp{display:grid;grid-template-columns:minmax(380px,1.1fr) 1.5fr;gap:20px;align-items:start}
+.mp-left{min-width:0}
+.mp-head,.mp-row{display:grid;grid-template-columns:minmax(120px,1.35fr) 1fr .9fr .9fr 84px;gap:10px;align-items:center;padding:8px 10px}
+.mp-head{font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.03em}.mp-head button{border:0;background:transparent;padding:0;font:inherit;text-transform:inherit;letter-spacing:inherit;color:inherit;text-align:right;cursor:pointer}.mp-head button.on{color:#2d2b23;font-weight:800}.mp-head span:first-child{text-align:left}
+.mp-list{max-height:calc(100dvh - 520px);min-height:240px;overflow:auto;display:grid;gap:2px;align-content:start}
+.mp-row{width:100%;border:0;background:transparent;border-radius:12px;text-align:left;font-size:13.5px;transition:background .15s}
+.mp-row:hover{background:#f4f6ec}.mp-row.on{background:#e9edda;box-shadow:inset 3px 0 0 #2d2b23}.mp-row>span{text-align:right;font-variant-numeric:tabular-nums}
+.mp-row .mp-name{display:grid;grid-template-columns:10px 1fr;column-gap:8px;text-align:left}.mp-name i{width:10px;height:10px;border-radius:50%;align-self:center;grid-row:1/3}.mp-name small{grid-column:2;font-size:11px;color:var(--muted);font-weight:400;line-height:1.2}
+.mp-row .up,.mp-detail .up{color:#b4631d}.mp-row .down,.mp-detail .down{color:var(--green)}.mp-spark{justify-self:end}
+.mp-detail{min-width:0}
+.mp-title{display:grid;gap:3px;margin-bottom:10px}.mp-title>div{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.mp-title>div b{font-size:22px}.mp-title em{font-style:normal;font-size:12px;background:#eef0e5;border-radius:999px;padding:3px 10px;color:var(--muted)}.mp-title span{font-size:13px;color:#4c4a3d}
+.mp-note{margin:0 0 10px;font-size:12.5px;color:#a44731;background:#fff6f2;border:1px solid #f0d6cd;border-radius:10px;padding:8px 12px}
+.mc-seg{margin-bottom:10px}.mc .pc-card{border:0;padding:0}.mc .pc-title{display:none}.mc .pc-top{justify-content:flex-end}.mc .pc-top:empty{display:none}
+@media(max-width:1000px){.mp{grid-template-columns:1fr}.mp-list{max-height:300px}.mp-head,.mp-row{grid-template-columns:minmax(110px,1.4fr) 1fr .9fr .9fr}.mp-spark{display:none}.mp-head span:last-child{display:none}}

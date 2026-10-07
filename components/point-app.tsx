@@ -6,6 +6,7 @@ import PointPayroll from './point-payroll';
 import { DailyCharts } from './point-charts';
 import { PeopleViz, ExpensesViz } from './point-report-viz';
 import { ReportScreens, CountUp } from './point-report-shell';
+import { MetalPrices, type PurchaseRow } from './point-metals';
 
 type Product = { id:string; name:string; default_price:number; status:string; sort_order?:number; category?:string|null };
 const CATEGORY_ORDER=['Медь','Латунь','Алюминий','Нержавейка','Свинец','Цинк','Чёрный металл','Пластик','Электроника','Смешанное'];
@@ -119,6 +120,7 @@ export default function PointApp(){
   const [reportTo,setReportTo]=useState(today());
   const [reportPeriod,setReportPeriod]=useState<'week'|'month'|'custom'>('week');
   const [reportPeople,setReportPeople]=useState<PersonRep[]>([]);
+  const [purchaseRows,setPurchaseRows]=useState<PurchaseRow[]>([]);
   const [openPerson,setOpenPerson]=useState<Record<string,boolean>>({});
   const [newProduct,setNewProduct]=useState({name:'',price:''});
   const [collapsed,setCollapsed]=useState<Record<string,boolean>>({stock:false,journal:true,summary:true});
@@ -337,12 +339,15 @@ export default function PointApp(){
     setDayInfo({report:(r.data??{}) as unknown as PointReport,evening:(e.data??{}) as unknown as EveningData});
   }
   async function loadReport(){
-    const [{data,error},people]=await Promise.all([
+    const [{data,error},people,detail]=await Promise.all([
       supabase.rpc('point_get_report',{p_from:reportFrom,p_to:reportTo}),
       supabase.rpc('point_get_people_report',{p_from:reportFrom,p_to:reportTo}),
+      supabase.rpc('point_get_purchase_detail',{p_from:reportFrom,p_to:reportTo}),
     ]);
     if(error){notify(error.message);return;}
     setReport((data??{}) as PointReport);
+    if(detail.error){notify(detail.error.message);setPurchaseRows([]);}
+    else setPurchaseRows(((detail.data??[]) as PurchaseRow[]));
     if(people.error){notify(people.error.message);setReportPeople([]);}
     else setReportPeople(((people.data??[]) as PersonRep[]).map(x=>({...x,items:x.items||[]})));
   }
@@ -710,8 +715,11 @@ export default function PointApp(){
               <div className={`kpi ${openLoans.length?'warn':''}`}><i className="kpi-ico">🧾</i><small>Не погашено долгов</small><b><CountUp value={num(openRemaining)} format={v=>money(v)}/></b><span>на сегодня, {openLoans.length} чел.</span></div>
             </div></div>
           </section>},
-          {key:'days',label:'По дням',icon:'📈',node:<section className="rs-page"><div className="rs-head"><h2>Закуп и цена по дням</h2><span>Наведите на день (на телефоне — коснитесь): сумма, вес и цена.</span></div>
+          {key:'days',label:'По дням',icon:'📈',node:<section className="rs-page"><div className="rs-head"><h2>Закуп и цена по дням</h2><span>Общая картина по всем металлам. Цены по каждому металлу — на вкладке «Цены».</span></div>
             <DailyCharts days={chartDays}/>
+          </section>},
+          {key:'metals',label:'Цены',icon:'🏷️',node:<section className="rs-page"><div className="rs-head"><h2>Закуп и цена по металлам</h2><span>У каждого металла своя цена — смотрите их отдельно.</span></div>
+            <MetalPrices rows={purchaseRows} from={reportFrom} to={reportTo}/>
           </section>},
           {key:'people',label:'Люди',icon:'👥',node:<section className="rs-page"><div className="rs-head"><h2>Кто сколько взял</h2><span>Строго за период. Нажмите на сотрудника — увидите записи.</span></div>
             <PeopleViz people={[...mainPeople,...(servicePerson?[servicePerson]:[])]} serviceNames={servicePeople.map(sp=>sp.name).join(', ')}/>
