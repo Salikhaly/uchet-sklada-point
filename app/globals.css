@@ -676,3 +676,28 @@
 .mp-detail{border-left:1px solid #d9dccd;padding-left:22px}
 @media(max-width:1100px){.pc-grid>.pc-card+.pc-card{border-left:0;padding-left:0;border-top:1px solid #d9dccd;padding-top:16px;margin-top:16px}}
 @media(max-width:1000px){.mp-detail{border-left:0;padding-left:0;border-top:1px solid #d9dccd;padding-top:16px}}
+
+/* ── Отчёт Точки: «Остатки» — деньги в металле ── */
+.mm-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-bottom:14px}
+.mm-stat{display:flex;flex-direction:column;gap:3px;padding:0 20px;border-left:1px solid #d9dccd;min-width:0}.mm-stat:first-child{border-left:0;padding-left:0}
+.mm-stat small{font-size:12px;color:var(--muted)}.mm-stat b{font-size:27px;font-variant-numeric:tabular-nums;line-height:1.15;overflow-wrap:anywhere}.mm-stat b.neg{color:var(--red)}
+.mm-dl.up{color:var(--green)}.mm-dl.down{color:#b4631d}
+.mm-insights{display:grid;gap:6px;margin-bottom:16px}
+.mm-ins{display:grid;grid-template-columns:26px 1fr;gap:8px;align-items:start;padding:9px 12px;border-radius:12px;background:#eef0e5;font-size:13.5px;line-height:1.4;animation:rs-rise .45s both}
+.mm-ins p{margin:0}.mm-ins span{font-size:16px;line-height:1.3}.mm-ins.warn{background:#fbefe6}.mm-ins.ok{background:#e8f1e3}
+.mm-cols{display:grid;grid-template-columns:1.15fr 1fr;gap:0 30px;align-items:start}
+.mm-panel{min-width:0}.mm-panel+.mm-panel{border-left:1px solid #d9dccd;padding-left:30px}
+.mm-ph{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;min-height:34px}.mm-ph>b{font-size:15px}.mm-ph>span{font-size:12px;color:var(--muted)}
+.mm-list{max-height:calc(100dvh - 560px);min-height:200px;overflow:auto;display:grid;gap:2px;align-content:start;padding-right:4px}
+.mm-item.open{background:#eef1e3;border-radius:12px}
+.mm-row{display:grid;grid-template-columns:minmax(130px,1.1fr) 1.2fr auto;gap:12px;align-items:center;width:100%;border:0;background:transparent;border-radius:12px;padding:8px 8px;text-align:left}
+.mm-row:hover{background:#f1f3e8}
+.mm-name{display:grid;grid-template-columns:10px 1fr;column-gap:8px}.mm-name i{width:10px;height:10px;border-radius:50%;align-self:center;grid-row:1/3}.mm-name b{font-size:14px}.mm-name small{grid-column:2;font-size:11px;color:var(--muted);line-height:1.25}
+.mm-bar{height:12px;background:#e2e5d6;border-radius:7px;overflow:hidden}.mm-bar span{display:block;height:100%;border-radius:7px;transform-origin:left;animation:pv-grow .7s cubic-bezier(.2,.8,.2,1) both}
+.mm-val{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-variant-numeric:tabular-nums;white-space:nowrap}.mm-val b{font-size:14px}
+.mm-val em{font-style:normal;font-size:11px;color:var(--muted)}.mm-val em.warn{color:#a44731}
+.mm-detail{display:grid;gap:5px;padding:4px 14px 12px 28px;font-size:13px}
+.mm-line{display:grid;grid-template-columns:190px 1fr;gap:12px}.mm-line span{color:var(--muted)}.mm-line b{font-weight:600}.mm-line small{font-weight:400;color:var(--muted)}
+.mm-line em{font-style:normal}.mm-line .down-bad{color:#a44731}.mm-line .up-good{color:var(--green)}
+@media(max-width:1000px){.mm-strip{grid-template-columns:repeat(2,1fr);gap:14px 0}.mm-stat:nth-child(3){border-left:0;padding-left:0}.mm-cols{grid-template-columns:1fr}.mm-panel+.mm-panel{border-left:0;padding-left:0;border-top:1px solid #d9dccd;padding-top:16px;margin-top:16px}.mm-list{max-height:none}.mm-row{grid-template-columns:1fr auto}.mm-bar{grid-column:1/-1;order:3}.mm-line{grid-template-columns:1fr}.mm-detail{padding-left:12px}}
+@media(max-width:640px){.mm-stat b{font-size:21px}.mm-stat{padding:0 10px}}

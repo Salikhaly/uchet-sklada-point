@@ -7,6 +7,7 @@ import { DailyCharts } from './point-charts';
 import { PeopleViz, ExpensesViz } from './point-report-viz';
 import { ReportScreens, CountUp } from './point-report-shell';
 import { MetalPrices, type PurchaseRow } from './point-metals';
+import { MetalMoney, type MetalRow } from './point-metal-money';
 
 type Product = { id:string; name:string; default_price:number; status:string; sort_order?:number; category?:string|null };
 const CATEGORY_ORDER=['Медь','Латунь','Алюминий','Нержавейка','Свинец','Цинк','Чёрный металл','Пластик','Электроника','Смешанное'];
@@ -121,6 +122,8 @@ export default function PointApp(){
   const [reportPeriod,setReportPeriod]=useState<'week'|'month'|'custom'>('week');
   const [reportPeople,setReportPeople]=useState<PersonRep[]>([]);
   const [purchaseRows,setPurchaseRows]=useState<PurchaseRow[]>([]);
+  const [metalNow,setMetalNow]=useState<MetalRow[]>([]);
+  const [metalPrev,setMetalPrev]=useState<MetalRow[]|null>(null);
   const [openPerson,setOpenPerson]=useState<Record<string,boolean>>({});
   const [newProduct,setNewProduct]=useState({name:'',price:''});
   const [collapsed,setCollapsed]=useState<Record<string,boolean>>({stock:false,journal:true,summary:true});
@@ -339,13 +342,23 @@ export default function PointApp(){
     setDayInfo({report:(r.data??{}) as unknown as PointReport,evening:(e.data??{}) as unknown as EveningData});
   }
   async function loadReport(){
-    const [{data,error},people,detail]=await Promise.all([
+    // прошлый период такой же длины — для сравнения «лучше / хуже»
+    const dayMs=86400000,iso2=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const fD=new Date(reportFrom+'T00:00:00'),tD=new Date(reportTo+'T00:00:00');
+    const spanDays=Math.round((tD.getTime()-fD.getTime())/dayMs)+1;
+    const pTo=new Date(fD.getTime()-dayMs),pFrom=new Date(pTo.getTime()-(spanDays-1)*dayMs);
+    const [{data,error},people,detail,metal,metalP]=await Promise.all([
       supabase.rpc('point_get_report',{p_from:reportFrom,p_to:reportTo}),
       supabase.rpc('point_get_people_report',{p_from:reportFrom,p_to:reportTo}),
       supabase.rpc('point_get_purchase_detail',{p_from:reportFrom,p_to:reportTo}),
+      supabase.rpc('point_get_metal_analytics',{p_from:reportFrom,p_to:reportTo}),
+      supabase.rpc('point_get_metal_analytics',{p_from:iso2(pFrom),p_to:iso2(pTo)}),
     ]);
     if(error){notify(error.message);return;}
     setReport((data??{}) as PointReport);
+    if(metal.error){notify(metal.error.message);setMetalNow([]);}
+    else setMetalNow((metal.data??[]) as MetalRow[]);
+    setMetalPrev(metalP.error?null:((metalP.data??[]) as MetalRow[]));
     if(detail.error){notify(detail.error.message);setPurchaseRows([]);}
     else setPurchaseRows(((detail.data??[]) as PurchaseRow[]));
     if(people.error){notify(people.error.message);setReportPeople([]);}
@@ -720,6 +733,9 @@ export default function PointApp(){
           </section>},
           {key:'metals',label:'Цены',icon:'🏷️',node:<section className="rs-page"><div className="rs-head"><h2>Закуп и цена по металлам</h2><span>У каждого металла своя цена — смотрите их отдельно.</span></div>
             <MetalPrices rows={purchaseRows} from={reportFrom} to={reportTo}/>
+          </section>},
+          {key:'stock',label:'Остатки',icon:'📦',node:<section className="rs-page"><div className="rs-head"><h2>Деньги в металле</h2><span>Сколько денег лежит в остатках, на чём вы зарабатываете и что подешевело.</span></div>
+            <MetalMoney cur={metalNow} prev={metalPrev} purchases={purchaseRows} from={reportFrom} to={reportTo}/>
           </section>},
           {key:'people',label:'Люди',icon:'👥',node:<section className="rs-page"><div className="rs-head"><h2>Кто сколько взял</h2><span>Строго за период. Нажмите на сотрудника — увидите записи.</span></div>
             <PeopleViz people={[...mainPeople,...(servicePerson?[servicePerson]:[])]} serviceNames={servicePeople.map(sp=>sp.name).join(', ')}/>
