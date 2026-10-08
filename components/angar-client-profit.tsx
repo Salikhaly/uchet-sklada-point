@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { CountUp } from './point-report-shell';
+import { SuppliersView } from './angar-suppliers';
 
 // Ангар → «Прибыль клиентов». Отвечает на вопрос владельца: с каких клиентов я хорошо зарабатываю.
 //  • Покупатели (кому отгружаю): реальная прибыль = выручка − себестоимость.
@@ -13,7 +14,8 @@ import { CountUp } from './point-report-shell';
 type BuyerMetal = { product: string; kg: number; revenue: number; cogs: number; avg_sale: number; premium: number };
 type Buyer = { id: string; name: string; group_id: string | null; group: string | null; revenue: number; cogs: number; profit: number; kg: number; premium: number; ops: number; metals: BuyerMetal[] };
 type SupMetal = { product: string; kg: number; spent: number; avg_buy: number; avg_sale: number | null; saving: number; exp_profit: number | null };
-type Supplier = { id: string; name: string; group_id: string | null; group: string | null; spent: number; kg: number; saving: number; exp_profit: number | null; assessed: number; ops: number; metals: SupMetal[] };
+type Receipt = { date: string; kg: number; amount: number };
+type Supplier = { id: string; name: string; group_id: string | null; group: string | null; spent: number; kg: number; saving: number; exp_profit: number | null; assessed: number; ops: number; last_date: string | null; recent: Receipt[]; metals: SupMetal[] };
 type Data = { totals: { in_sum: number; in_kg: number; out_sum: number; out_kg: number; cogs: number }; buyers: Buyer[]; suppliers: Supplier[] };
 
 const nf0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
@@ -32,7 +34,7 @@ const pad = (v: number) => String(v).padStart(2, '0');
 const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 type BRow = { key: string; name: string; members: string[]; single: boolean; revenue: number; cogs: number; profit: number; kg: number; premium: number; ops: number; margin: number; perKg: number; metals: BuyerMetal[] };
-type SRow = { key: string; name: string; members: string[]; single: boolean; spent: number; kg: number; saving: number; exp: number; assessedShare: number; ops: number; metals: SupMetal[] };
+export type SRow = { key: string; name: string; members: string[]; single: boolean; spent: number; kg: number; saving: number; exp: number; assessedShare: number; ops: number; last_date: string | null; recent: Array<Receipt & { who?: string }>; metals: SupMetal[] };
 
 function mergeBuyers(list: Buyer[], merge: boolean): BRow[] {
   const map = new Map<string, BRow>();
@@ -56,8 +58,10 @@ function mergeSuppliers(list: Supplier[], merge: boolean): SRow[] {
   list.forEach((s) => {
     const grouped = merge && !!s.group_id;
     const key = grouped ? `g:${s.group_id}` : `c:${s.id}`;
-    const cur = map.get(key) || { key, name: grouped ? (s.group || s.name) : s.name, members: [], single: !grouped, spent: 0, kg: 0, saving: 0, exp: 0, assessedShare: 0, assessed: 0, ops: 0, metals: [] };
+    const cur = map.get(key) || { key, name: grouped ? (s.group || s.name) : s.name, members: [], single: !grouped, spent: 0, kg: 0, saving: 0, exp: 0, assessedShare: 0, assessed: 0, ops: 0, last_date: null as string | null, recent: [] as Array<Receipt & { who?: string }>, metals: [] };
     cur.members.push(s.name); cur.spent += n(s.spent); cur.kg += n(s.kg); cur.saving += n(s.saving); cur.exp += n(s.exp_profit); cur.assessed += n(s.assessed); cur.ops += n(s.ops);
+    if (s.last_date && (!cur.last_date || String(s.last_date) > cur.last_date)) cur.last_date = String(s.last_date).slice(0, 10);
+    (s.recent || []).forEach((x) => cur.recent.push({ ...x, who: grouped ? s.name : undefined }));
     s.metals.forEach((m) => {
       const ex = cur.metals.find((x) => x.product === m.product);
       if (ex) { ex.kg += n(m.kg); ex.spent += n(m.spent); ex.saving += n(m.saving); ex.exp_profit = m.exp_profit == null ? ex.exp_profit : n(ex.exp_profit) + n(m.exp_profit); }
@@ -65,7 +69,7 @@ function mergeSuppliers(list: Supplier[], merge: boolean): SRow[] {
     });
     map.set(key, cur);
   });
-  return [...map.values()].map((r) => ({ ...r, assessedShare: r.spent > 0 ? (r.assessed / r.spent) * 100 : 0, metals: r.metals.sort((a, b) => b.spent - a.spent) })).sort((a, b) => b.spent - a.spent);
+  return [...map.values()].map((r) => ({ ...r, assessedShare: r.spent > 0 ? (r.assessed / r.spent) * 100 : 0, recent: r.recent.sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 8), metals: r.metals.sort((a, b) => b.spent - a.spent) })).sort((a, b) => b.spent - a.spent);
 }
 
 function useWidth() {
@@ -145,7 +149,6 @@ export default function ClientProfit({ onClient }: { onClient?: (name: string) =
   const [side, setSide] = useState<'buyers' | 'suppliers'>('buyers');
   const [merge, setMerge] = useState(true);
   const [bm, setBm] = useState<'profit' | 'margin' | 'perkg'>('profit');
-  const [sm, setSm] = useState<'spent' | 'saving' | 'exp'>('spent');
   const [sel, setSel] = useState<string | null>(null);
 
   const range = useMemo(() => {
@@ -203,9 +206,6 @@ export default function ClientProfit({ onClient }: { onClient?: (name: string) =
   const bVal = (r: BRow) => (bm === 'profit' ? r.profit : bm === 'margin' ? r.margin : r.perKg);
   const bSorted = [...buyers].sort((a, b) => bVal(b) - bVal(a));
   const bMax = Math.max(1, ...bSorted.map((r) => Math.abs(bVal(r))));
-  const sVal = (r: SRow) => (sm === 'spent' ? r.spent : sm === 'saving' ? r.saving : r.exp);
-  const sSorted = [...suppliers].sort((a, b) => sVal(b) - sVal(a));
-  const sMax = Math.max(1, ...sSorted.map((r) => Math.abs(sVal(r))));
 
   const toggle = (k: string) => setSel(sel === k ? null : k);
 
@@ -229,12 +229,21 @@ export default function ClientProfit({ onClient }: { onClient?: (name: string) =
 
       {data && (
         <>
-          <div className="mm-strip">
-            <div className="mm-stat"><small>Прибыль (реальная)</small><b className={totalProfit < 0 ? 'neg' : ''}><CountUp value={totalProfit} format={rub} /></b><small>с продаж за период</small></div>
-            <div className="mm-stat"><small>Выручка от продаж</small><b><CountUp value={totalRev} format={rub} /></b><small>{kgf(n(data.totals.out_kg))} продано</small></div>
-            <div className="mm-stat"><small>Средняя маржа</small><b><CountUp value={avgMargin} format={(v) => pc(v)} /></b><small>{rub(totalProfit / Math.max(1, n(data.totals.out_kg)))} прибыли на кг</small></div>
-            <div className="mm-stat"><small>Закуплено</small><b><CountUp value={n(data.totals.in_sum)} format={rub} /></b><small>{kgf(n(data.totals.in_kg))} принято</small></div>
-          </div>
+          {side === 'buyers' ? (
+            <div className="mm-strip">
+              <div className="mm-stat"><small>Прибыль (реальная)</small><b className={totalProfit < 0 ? 'neg' : ''}><CountUp value={totalProfit} format={rub} /></b><small>с продаж за период</small></div>
+              <div className="mm-stat"><small>Выручка от продаж</small><b><CountUp value={totalRev} format={rub} /></b><small>{kgf(n(data.totals.out_kg))} продано</small></div>
+              <div className="mm-stat"><small>Средняя маржа</small><b><CountUp value={avgMargin} format={(v) => pc(v)} /></b><small>{rub(totalProfit / Math.max(1, n(data.totals.out_kg)))} прибыли на кг</small></div>
+              <div className="mm-stat"><small>Покупателей</small><b><CountUp value={buyers.length} format={(v) => String(Math.round(v))} /></b><small>с продажами за период</small></div>
+            </div>
+          ) : (
+            <div className="mm-strip">
+              <div className="mm-stat"><small>Закуплено</small><b><CountUp value={spentTotal} format={rub} /></b><small>{kgf(n(data.totals.in_kg))} принято</small></div>
+              <div className="mm-stat"><small>Поставщиков</small><b><CountUp value={suppliers.length} format={(v) => String(Math.round(v))} /></b><small>{data.suppliers.length} {data.suppliers.length === 1 ? 'контрагент' : 'контрагентов'} в учёте</small></div>
+              <div className="mm-stat"><small>Выгода от цены (всего)</small><b className={savingTotal < 0 ? 'neg' : ''}><CountUp value={savingTotal} format={(v) => signed(v)} /></b><small>против средней закупочной цены</small></div>
+              <div className="mm-stat"><small>Ожидаемая прибыль</small><b><CountUp value={expTotal} format={rub} /></b><small>оценка по средним ценам продажи</small></div>
+            </div>
+          )}
 
           <div className="cp-bar">
             <div className="pc-seg">
@@ -288,39 +297,7 @@ export default function ClientProfit({ onClient }: { onClient?: (name: string) =
               </div>
             )
           ) : (
-            !suppliers.length ? <div className="empty-state compact">За период не было приходов.</div> : (
-              <div>
-                <div className="mm-ph"><b>Поставщики</b>
-                  <div className="pc-seg"><button type="button" className={sm === 'spent' ? 'on' : ''} onClick={() => setSm('spent')}>Закуплено ₸</button><button type="button" className={sm === 'saving' ? 'on' : ''} onClick={() => setSm('saving')}>Выгода от цены</button><button type="button" className={sm === 'exp' ? 'on' : ''} onClick={() => setSm('exp')}>Ожидаемая прибыль</button></div>
-                </div>
-                <p className="pv-hint cp-note">Прибыль с поставщика в учёте не хранится (себестоимость идёт «по средней»), поэтому это оценка. <b>Выгода от цены</b> — дешевле или дороже средней закупочной цены по тем же металлам. <b>Ожидаемая прибыль</b> — если металл от поставщика продать по средней цене продажи. Итого по всем: выгода {signed(savingTotal)}, ожидаемая прибыль {compact(expTotal)}.</p>
-                <div className="mm-list cp-list" data-noswipe>
-                  {sSorted.map((r, i) => {
-                    const open = sel === r.key;
-                    return (
-                      <div key={r.key} className={`mm-item${open ? ' open' : ''}`}>
-                        <button type="button" className="mm-row" onClick={() => toggle(r.key)}>
-                          <span className="mm-name"><i style={{ background: `hsl(${hue(r.name)} 50% 55%)` }} /><b>{r.name}</b><small>{compact(r.spent)} · {kgf(r.kg)} · {price(r.spent / Math.max(1, r.kg))}{r.members.length > 1 ? ` · ${r.members.length} ${plural(r.members.length, 'контрагент', 'контрагента', 'контрагентов')}` : ''}</small></span>
-                          <span className="mm-bar"><span style={{ width: `${Math.max(2, (Math.abs(sVal(r)) / sMax) * 100)}%`, background: sm === 'spent' ? '#6f86b8' : sVal(r) >= 0 ? '#3e7b5d' : '#c9822f', animationDelay: `${Math.min(i * 40, 500)}ms` }} /></span>
-                          <span className="mm-val"><b>{sm === 'spent' ? compact(r.spent) : sm === 'saving' ? signed(r.saving) : compact(r.exp)}</b><em className={r.saving >= 0 ? 'ok' : 'warn'}>{r.saving >= 0 ? 'дешевле среднего' : 'дороже среднего'}</em></span>
-                        </button>
-                        {open && (
-                          <div className="mm-detail">
-                            <Line l="Закуплено" v={`${kgf(r.kg)} на ${rub(r.spent)} · ${r.ops} ${plural(r.ops, 'приход', 'прихода', 'приходов')} · в среднем ${price(r.spent / Math.max(1, r.kg))}`} />
-                            <Line l="Выгода от цены" v={Math.abs(r.saving) < 1 ? 'на уровне средней закупочной цены' : <span className={r.saving >= 0 ? 'cp-good' : 'cp-bad'}>{r.saving >= 0 ? 'дешевле средней закупочной цены на' : 'дороже средней закупочной цены на'} {compact(Math.abs(r.saving))}</span>} />
-                            <Line l="Ожидаемая прибыль" v={<>{compact(r.exp)} <small>(оценено {pc(r.assessedShare)} закупа; остальное ещё не продавалось)</small></>} />
-                            <div className="cp-tbl-wrap"><table className="cp-tbl"><thead><tr><th>Металл</th><th>кг</th><th>Цена</th><th>Средняя закупа</th><th>Разница</th><th>Ср. продажа</th><th>Ожид. прибыль</th></tr></thead>
-                              <tbody>{r.metals.map((m) => { const p = m.kg > 0 ? m.spent / m.kg : 0, d = m.avg_buy - p; return (
-                                <tr key={m.product}><td>{m.product}</td><td>{nf0.format(m.kg)}</td><td>{nf1.format(p)}</td><td>{nf1.format(m.avg_buy)}</td><td className={d >= 0 ? 'cp-good' : 'cp-bad'}>{diffTxt(-d)}</td><td>{m.avg_sale == null ? '—' : nf1.format(m.avg_sale)}</td><td>{m.exp_profit == null ? 'не продавался' : compact(m.exp_profit)}</td></tr>); })}</tbody></table></div>
-                            {r.single && onClient && <button type="button" className="pay-link" onClick={() => onClient(r.name)}>Открыть карточку клиента →</button>}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )
+            suppliers.length ? <SuppliersView rows={suppliers} onClient={onClient} /> : <div className="empty-state compact">За период не было приходов.</div>
           )}
         </>
       )}
