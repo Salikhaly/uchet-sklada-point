@@ -2,8 +2,9 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import ClientProfit from './angar-client-profit';
 
-type Tab = 'monitor'|'operation'|'journal'|'stock'|'report'|'search'|'clients'|'products'|'control';
+type Tab = 'monitor'|'operation'|'journal'|'stock'|'report'|'clientprofit'|'search'|'clients'|'products'|'control';
 type Mode = 'ARRIVAL'|'SHIPMENT';
 type Product={id:string;name:string;default_price:number;status:string;sort_order?:number;category?:string|null};
 const CATEGORY_ORDER=['Медь','Латунь','Алюминий','Нержавейка','Свинец','Цинк','Чёрный металл','Пластик','Электроника','Смешанное'];
@@ -225,7 +226,7 @@ export default function WarehouseApp({userEmail='',profile=null}:{userEmail?:str
       <div className="top-actions"><span className="workspace-pill">{profile?.workspace_id ? 'Метал' : 'Склад'}</span>{profile?.point_workspace_id&&<button className="workspace-switch" onClick={()=>{window.location.href='/point';}}>Точка</button>}<button onClick={controlCheck}>Проверка</button><button onClick={logout}>Выйти</button></div>
     </header>
     <nav className="navtabs">
-      {([['monitor','Монитор'],['operation','Операция'],['journal','Журнал'],['stock','Остатки'],['report','Отчёты'],['search','Поиск'],['clients','Контрагенты'],['products','Товары'],['control','Контроль']] as const).map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>nav(id)}>{label}</button>)}
+      {([['monitor','Монитор'],['operation','Операция'],['journal','Журнал'],['stock','Остатки'],['report','Отчёты'],['clientprofit','Прибыль клиентов'],['search','Поиск'],['clients','Контрагенты'],['products','Товары'],['control','Контроль']] as const).map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>nav(id)}>{label}</button>)}
     </nav>
     <main className="page">
       {draftRestored&&tab==='operation'&&<div className="notice">Найден черновик сегодняшней операции. <button onClick={()=>{localStorage.removeItem('warehouse-draft-v2');setRows({});setDraftRestored(false);}}>Очистить</button></div>}
@@ -236,6 +237,7 @@ export default function WarehouseApp({userEmail='',profile=null}:{userEmail?:str
       {tab==='journal'&&<JournalView ops={filteredOps} contractors={contractors} products={activeProducts} client={journalClient} setClient={setJournalClient} product={journalProduct} setProduct={setJournalProduct} from={journalFrom} to={journalTo} setFrom={setJournalFrom} setTo={setJournalTo} focusId={journalFocusId} focusProductId={journalFocusProductId} clearFocus={()=>{setJournalFocusId(null);setJournalFocusProductId(null);}} onRepeat={repeatOperation} onHistory={showHistory} onCancel={(o:Operation)=>setModal({kind:'confirmCancel',op:o})} onRestore={restoreOperation} onEdit={(o:Operation)=>setModal({kind:'edit',op:o})} onDelete={(o:Operation)=>setModal({kind:'confirmDelete',op:o})}/>} 
       {tab==='stock'&&<StockView stock={stock} products={activeProducts} onProduct={openProductCard}/>} 
       {tab==='report'&&<ReportView report={report} from={reportFrom} to={reportTo} setFrom={setReportFrom} setTo={setReportTo} load={loadReport} onProduct={openProductCard} onClient={openClientCardByName} onGroup={openGroupCardByName} reportView={reportView} setReportView={setReportView}/>}
+      {tab==='clientprofit'&&<ClientProfit onClient={openClientCardByName}/>}
       {tab==='search'&&<SearchView search={search} setSearch={setSearch} run={runSearch} results={searchResults} onOpen={openSearchResult}/>} 
       {tab==='clients'&&<ClientsView contractors={contractors} groups={groups} expanded={expandedGroups} setExpanded={setExpandedGroups} onClient={(c:Contractor)=>setModal({kind:'client',client:c})} onGroup={(g:Group)=>setModal({kind:'group',group:g})} onDeleteClient={archiveContractor} onDeleteGroup={archiveGroup} newClient={newClient} setNewClient={setNewClient} createClient={createContractor} groupForm={groupForm} setGroupForm={setGroupForm} createGroup={createGroup}/>} 
       {tab==='products'&&<ProductsView products={products} newProduct={newProduct} setNewProduct={setNewProduct} createProduct={createProduct} onPrice={(p:Product)=>setModal({kind:'price',price:p})} onMove={moveProduct} onCategory={setProductCategory}/>} 
