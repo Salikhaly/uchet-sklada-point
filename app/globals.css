@@ -701,3 +701,21 @@
 .mm-line em{font-style:normal}.mm-line .down-bad{color:#a44731}.mm-line .up-good{color:var(--green)}
 @media(max-width:1000px){.mm-strip{grid-template-columns:repeat(2,1fr);gap:14px 0}.mm-stat:nth-child(3){border-left:0;padding-left:0}.mm-cols{grid-template-columns:1fr}.mm-panel+.mm-panel{border-left:0;padding-left:0;border-top:1px solid #d9dccd;padding-top:16px;margin-top:16px}.mm-list{max-height:none}.mm-row{grid-template-columns:1fr auto}.mm-bar{grid-column:1/-1;order:3}.mm-line{grid-template-columns:1fr}.mm-detail{padding-left:12px}}
 @media(max-width:640px){.mm-stat b{font-size:21px}.mm-stat{padding:0 10px}}
+
+/* ── Ангар: «Прибыль клиентов» ── */
+.cp{display:block}
+.cp-top{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:14px}.cp-ctl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cp-dates{display:flex;align-items:center;gap:6px}.cp-dates input{border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 10px}
+.cp-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 12px}
+.cp-cols{display:grid;grid-template-columns:1fr 1.05fr;gap:0 30px;align-items:start}.cp-left{min-width:0}.cp-right{min-width:0;border-left:1px solid #d9dccd;padding-left:30px}
+.cp-chart{position:relative;width:100%}.cp-chart svg{display:block;overflow:visible}
+.cp-bub{cursor:pointer;transform-box:fill-box;transform-origin:center;animation:pc-pop .5s cubic-bezier(.2,.8,.2,1) both}.cp-bub:hover circle{fill-opacity:.85}
+.cp-bub-t{font-size:10.5px;font-weight:700;fill:#fff;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.25);stroke-width:2px}
+.cp-axis-note{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin:2px 0 0 46px}
+.cp-list{max-height:calc(100dvh - 520px);min-height:260px}
+.cp-note{margin:0 0 10px}
+.cp-tbl-wrap{overflow-x:auto;margin-top:6px}.cp-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.cp-tbl th{font-size:10.5px;text-transform:uppercase;color:var(--muted);text-align:right;padding:5px 8px;border-bottom:1.5px solid #2d2b23;white-space:nowrap}.cp-tbl th:first-child,.cp-tbl td:first-child{text-align:left}
+.cp-tbl td{text-align:right;padding:6px 8px;border-bottom:1px solid #e4e6dc;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cp-good{color:var(--green)}.cp-bad{color:#b4631d}.mm-val em.ok{color:var(--green)}
+@media(max-width:1000px){.cp-cols{grid-template-columns:1fr}.cp-right{border-left:0;padding-left:0;border-top:1px solid #d9dccd;padding-top:16px;margin-top:16px}.cp-list{max-height:none}}
