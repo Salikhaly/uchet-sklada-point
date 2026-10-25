@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import ClientProfit from './angar-client-profit';
+import { readOperationPages } from '@/lib/operation-pages';
 
 type Tab = 'monitor'|'operation'|'journal'|'stock'|'report'|'clientprofit'|'search'|'clients'|'products'|'control';
 type Mode = 'ARRIVAL'|'SHIPMENT';
@@ -67,13 +68,15 @@ export default function WarehouseApp({userEmail='',profile=null}:{userEmail?:str
   function notify(m:string){setToast(m);window.setTimeout(()=>setToast(''),3200);}
 
   async function loadData(){
+    const workspaceId=profile?.workspace_id;
+    if(!workspaceId){notify('Профиль склада не настроен');setLoading(false);return;}
     setLoading(true);
     const [ps,cs,gs,st,os]=await Promise.all([
       supabase.from('products').select('id,name,default_price,status,sort_order,category').order('sort_order',{ascending:true}).order('name',{ascending:true}),
       supabase.from('contractors').select('id,name,group_id,archived_at,contractor_groups(id,name,archived_at)').is('archived_at',null).order('name'),
       supabase.from('contractor_groups').select('id,name,archived_at').is('archived_at',null).order('name'),
       supabase.rpc('dashboard_summary'),
-      supabase.from('operations').select('id,operation_number,operation_date,type,role,status,version,contractor_id,created_at,contractors(name,contractor_groups(name)),operation_items(product_id,quantity_kg,unit_price,total_amount,waste_kg,cogs_amount,products(name))').order('operation_date',{ascending:false}).order('created_at',{ascending:false}).limit(200)
+      readOperationPages((from,to)=>supabase.from('operations').select('id,operation_number,operation_date,type,role,status,version,contractor_id,created_at,contractors(name,contractor_groups(name)),operation_items(product_id,quantity_kg,unit_price,total_amount,waste_kg,cogs_amount,products(name))').eq('workspace_id',workspaceId).order('operation_date',{ascending:false}).order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,to))
     ]);
     if(ps.error||cs.error||gs.error||st.error||os.error){notify([ps.error,cs.error,gs.error,st.error,os.error].find(Boolean)?.message||'Ошибка загрузки');setLoading(false);return;}
     setProducts((ps.data||[]) as Product[]);
